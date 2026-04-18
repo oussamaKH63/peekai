@@ -23,14 +23,6 @@ _active_span: ContextVar[Span | None] = ContextVar("_active_span", default=None)
 class Tracer:
     """
     Central tracer that creates traces/spans and persists them to storage.
-
-    Usage:
-        tracer = Tracer()
-
-        with tracer.start_trace("my_agent") as trace:
-            with tracer.start_span("gpt-4o call") as span:
-                # ... make LLM call ...
-                span.output = response_text
     """
 
     def __init__(self, storage: Storage | None = None, db_path: str | Path | None = None) -> None:
@@ -124,10 +116,6 @@ class Tracer:
             @tracer.trace("my_agent")
             def run():
                 ...
-
-            @tracer.trace()
-            async def run_async():
-                ...
         """
         import asyncio
 
@@ -159,6 +147,70 @@ class Tracer:
                         t.status = SpanStatus.ERROR
                         self.finish_trace(t)
                         raise exc
+                return sync_wrapper
+
+        return decorator
+
+    # ------------------------------------------------------------------
+    # @agent() decorator  — Phase 5
+    # ------------------------------------------------------------------
+
+    def agent(self, name: str | None = None) -> Callable[..., Any]:
+        """
+        Decorator that wraps a sub-agent function in an AGENT span.
+
+        Automatically propagates the parent span context so the sub-agent's
+        LLM calls appear as children in the waterfall tree.
+
+        Usage:
+            @tracer.agent("researcher")
+            def researcher_agent(task: str) -> str:
+                # LLM calls here become children of the researcher span
+                ...
+
+            @tracer.agent()
+            async def writer_agent(draft: str) -> str:
+                ...
+        """
+        import asyncio
+
+        def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            agent_name = name or fn.__name__
+
+            if asyncio.iscoroutinefunction(fn):
+                @functools.wraps(fn)
+                async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                    # Create an AGENT span — becomes parent for all spans inside
+                    agent_span = self.start_span(agent_name, kind=SpanKind.AGENT)
+                    # Save the caller's span so we can restore it after
+                    previous_span = _active_span.get()
+                    _active_span.set(agent_span)
+                    try:
+                        result = await fn(*args, **kwargs)
+                        self.finish_span(agent_span)
+                        return result
+                    except Exception as exc:
+                        self.finish_span_with_error(agent_span, exc)
+                        raise exc
+                    finally:
+                        # Restore caller's span context
+                        _active_span.set(previous_span)
+                return async_wrapper
+            else:
+                @functools.wraps(fn)
+                def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+                    agent_span = self.start_span(agent_name, kind=SpanKind.AGENT)
+                    previous_span = _active_span.get()
+                    _active_span.set(agent_span)
+                    try:
+                        result = fn(*args, **kwargs)
+                        self.finish_span(agent_span)
+                        return result
+                    except Exception as exc:
+                        self.finish_span_with_error(agent_span, exc)
+                        raise exc
+                    finally:
+                        _active_span.set(previous_span)
                 return sync_wrapper
 
         return decorator

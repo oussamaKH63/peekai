@@ -22,6 +22,7 @@ __all__ = [
     "init",
     "trace",
     "tool",
+    "agent",
     "Tracer",
     "Storage",
     "Trace",
@@ -111,6 +112,25 @@ def tool(name: str | None = None) -> Any:
     _require_init()
     assert _tracer is not None
     return _tracer.tool(name)
+
+
+def agent(name: str | None = None) -> Any:
+    """
+    Decorator that wraps a sub-agent function in an AGENT span.
+
+    All LLM/tool calls inside the decorated function become children
+    of this agent span in the waterfall tree.
+
+    Requires peekai.init() to have been called first.
+
+    Usage:
+        @peekai.agent("researcher")
+        def researcher_agent(task: str) -> str:
+            ...
+    """
+    _require_init()
+    assert _tracer is not None
+    return _tracer.agent(name)
 
 
 def get_tracer() -> Tracer:

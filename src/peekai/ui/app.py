@@ -14,7 +14,7 @@ import json
 
 import streamlit as st
 
-from peekai.core.models import SpanStatus, Trace
+from peekai.core.models import SpanKind, SpanStatus, Trace
 from peekai.core.storage import Storage
 from peekai.ui.styles import (
     GLOBAL_CSS,
@@ -444,22 +444,44 @@ elif page == "🔎 Trace View":
     # ── Span waterfall ────────────────────────────────────────────
     st.markdown(section_header("Span waterfall"), unsafe_allow_html=True)
 
+    # Build depth map for proper tree indentation
+    span_map = {s.span_id: s for s in trace.spans}
+
+    def get_depth(span: "Span") -> int:
+        depth = 0
+        current = span
+        while current.parent_span_id and current.parent_span_id in span_map:
+            depth += 1
+            current = span_map[current.parent_span_id]
+        return depth
+
+    # Kind icons and colors
+    kind_icons = {
+        "llm": "🤖", "tool": "🔧", "agent": "🧠", "chain": "🔗",
+    }
+    kind_colors = {
+        "agent": "#f59e0b",  # amber for agent spans
+    }
+
     # Compute total trace duration for bar scaling
     total_ms = trace.duration_ms or 1.0
     if total_ms == 0:
         total_ms = 1.0
 
     for span in trace.spans:
+        depth = get_depth(span)
+        indent_px = depth * 28
         is_error = span.status == SpanStatus.ERROR
-        indent_px = "24px" if span.parent_span_id else "0px"
+        is_agent = span.kind == SpanKind.AGENT
         span_ms = span.duration_ms or 0
         bar_pct = min((span_ms / total_ms) * 100, 100)
         bar_html = waterfall_bar(bar_pct, span.provider or span.kind.value, span.status.value)
         status_html = pill(span.status.value)
-        border_color = "#3f1515" if is_error else "#1e2535"
-        indent_arrow = '↳ ' if span.parent_span_id else ''
+        border_color = "#3f1515" if is_error else ("#2d2008" if is_agent else "#1e2535")
+        icon = kind_icons.get(span.kind.value, "•")
+        name_color = kind_colors.get(span.kind.value, "#e2e8f0")
+        tree_prefix = "└─ " if depth > 0 else ""
 
-        # Span header card — rendered outside expander so HTML works reliably
         error_html = ""
         if is_error and span.error:
             error_html = (
@@ -469,10 +491,13 @@ elif page == "🔎 Trace View":
             )
 
         st.markdown(
-            f'<div style="margin-left:{indent_px};background:#161b27;border:1px solid {border_color};'
+            f'<div style="margin-left:{indent_px}px;background:#161b27;border:1px solid {border_color};'
             f'border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:0.25rem;">'
             f'<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.35rem;">'
-            f'<span style="color:#64748b;font-size:0.88rem;font-weight:600">{indent_arrow}{span.name}</span>'
+            f'<span style="color:#475569;font-size:0.8rem">{tree_prefix}</span>'
+            f'<span style="font-size:0.9rem">{icon}</span>'
+            f'<span style="color:{name_color};font-size:0.88rem;font-weight:600">{span.name}</span>'
+            f'<span style="font-size:0.68rem;color:#475569;background:#1e2535;padding:1px 6px;border-radius:4px">{span.kind.value}</span>'
             f'{status_html}'
             f'<span style="font-size:0.72rem;color:#475569;margin-left:auto">'
             f'{fmt_duration(span.duration_ms)}'
@@ -485,8 +510,25 @@ elif page == "🔎 Trace View":
             unsafe_allow_html=True,
         )
 
-        # Details in expander — only plain Streamlit widgets here (no unsafe HTML)
-        with st.expander(f"Details — {span.name}", expanded=is_error):
+        # Agent spans have no I/O — skip the expander entirely
+        if is_agent:
+            st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+            continue
+
+        # Use columns to indent the expander to match its card depth.
+        # The card uses margin-left: depth*28px. We approximate that with
+        # a column ratio. depth=0 → no spacer, depth=1 → small spacer, etc.
+        # We use (depth-1) so the expander aligns with the card's left edge,
+        # not one level deeper.
+        effective_depth = max(depth - 1, 0)
+        if effective_depth > 0:
+            ratio = effective_depth * 0.08
+            spacer_cols = st.columns([ratio, 1 - ratio])
+            expander_col = spacer_cols[1]
+        else:
+            expander_col = st
+
+        with expander_col.expander(f"Details — {span.name}", expanded=is_error):
             tab_in, tab_out, tab_tools, tab_raw = st.tabs(
                 ["📨 Input", "💬 Output", "🔧 Tool Calls", "📄 Raw"]
             )
@@ -510,6 +552,7 @@ elif page == "🔎 Trace View":
                         height=150,
                         disabled=True,
                         label_visibility="collapsed",
+                        key=f"out_{span.span_id}",
                     )
                 else:
                     st.caption("No output recorded.")

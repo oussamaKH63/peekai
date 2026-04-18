@@ -97,10 +97,10 @@
 
 | Status | Task | Priority | Effort |
 |--------|------|----------|--------|
-| ⬜ | Parent/child span relationship in data model | High | 2 hrs |
-| ⬜ | Agent handoff tracking via context propagation | High | 3 hrs |
-| ⬜ | Multi-agent waterfall tree view in UI | High | 4 hrs |
-| ⬜ | `peekai map <trace-id>` — ASCII agent flow in CLI | Medium | 2 hrs |
+| ✅ | Parent/child span relationship in data model | High | 2 hrs |
+| ✅ | Agent handoff tracking via context propagation | High | 3 hrs |
+| ✅ | Multi-agent waterfall tree view in UI | High | 4 hrs |
+| ✅ | `peekai map <trace-id>` — ASCII agent flow in CLI | Medium | 2 hrs |
 
 ---
 
