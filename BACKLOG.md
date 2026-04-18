@@ -54,13 +54,13 @@
 
 | Status | Task | Priority | Effort |
 |--------|------|----------|--------|
-| ⬜ | Set up Typer CLI skeleton | High | 30 min |
-| ⬜ | `peekai list` — show last 10 traces | High | 1 hr |
-| ⬜ | `peekai view <trace-id>` — pretty print trace | High | 2 hrs |
-| ⬜ | `peekai stats` — total cost, tokens, runs | Medium | 1 hr |
-| ⬜ | `peekai clear` — wipe local storage | Medium | 30 min |
-| ⬜ | `peekai ui` — launch Streamlit UI | High | 30 min |
-| ⬜ | Colorized terminal output with `rich` | Medium | 1 hr |
+| ✅ | Set up Typer CLI skeleton | High | 30 min |
+| ✅ | `peekai list` — show last 10 traces | High | 1 hr |
+| ✅ | `peekai view <trace-id>` — pretty print trace | High | 2 hrs |
+| ✅ | `peekai stats` — total cost, tokens, runs | Medium | 1 hr |
+| ✅ | `peekai clear` — wipe local storage | Medium | 30 min |
+| ✅ | `peekai ui` — launch Streamlit UI | High | 30 min |
+| ✅ | Colorized terminal output with `rich` | Medium | 1 hr |
 
 ---
 
