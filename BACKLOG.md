@@ -69,13 +69,13 @@
 
 | Status | Task | Priority | Effort |
 |--------|------|----------|--------|
-| ⬜ | Trace list view with status, cost, duration | High | 2 hrs |
-| ⬜ | Trace detail waterfall view (span by span) | High | 3 hrs |
-| ⬜ | Token + cost breakdown per span | High | 1 hr |
-| ⬜ | Error highlighting in trace view | High | 1 hr |
-| ⬜ | Filter traces by status, model, date | Medium | 2 hrs |
-| ⬜ | JSON input/output viewer per span | Medium | 1 hr |
-| ⬜ | Total dashboard — runs, cost, tokens over time | Medium | 2 hrs |
+| ✅ | Trace list view with status, cost, duration | High | 2 hrs |
+| ✅ | Trace detail waterfall view (span by span) | High | 3 hrs |
+| ✅ | Token + cost breakdown per span | High | 1 hr |
+| ✅ | Error highlighting in trace view | High | 1 hr |
+| ✅ | Filter traces by status, model, date | Medium | 2 hrs |
+| ✅ | JSON input/output viewer per span | Medium | 1 hr |
+| ✅ | Total dashboard — runs, cost, tokens over time | Medium | 2 hrs |
 
 ---
 
