@@ -20,11 +20,11 @@
 
 | Status | Task | Priority | Effort |
 |--------|------|----------|--------|
-| ⬜ | Set up project structure and folders | High | 30 min |
+| ✅ | Set up project structure and folders | High | 30 min |
 | ⬜ | Set up virtual environment | High | 15 min |
-| ⬜ | Create `pyproject.toml` with project metadata | High | 30 min |
-| ⬜ | Add `.gitignore` for Python + SQLite | High | 10 min |
-| ⬜ | Write initial README with vision + install preview | High | 45 min |
+| ✅ | Create `pyproject.toml` with project metadata | High | 30 min |
+| ✅ | Add `.gitignore` for Python + SQLite | High | 10 min |
+| ✅ | Write initial README with vision + install preview | High | 45 min |
 
 ---
 
