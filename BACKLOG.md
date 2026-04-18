@@ -33,19 +33,19 @@
 
 | Status | Task | Priority | Effort |
 |--------|------|----------|--------|
-| ⬜ | Create `Span` and `Trace` dataclasses | High | 1 hr |
-| ⬜ | Build `Tracer` class with `ContextVar` for async safety | High | 2 hrs |
-| ⬜ | Build `Storage` class with SQLite via `sqlite3` | High | 2 hrs |
-| ⬜ | Implement OpenAI SDK monkey-patch | High | 3 hrs |
-| ⬜ | Implement Anthropic SDK monkey-patch | High | 2 hrs |
-| ⬜ | Implement LiteLLM monkey-patch | Medium | 2 hrs |
-| ⬜ | Token tracking per span | High | 1 hr |
-| ⬜ | Cost calculation per span per model | High | 1 hr |
-| ⬜ | Error capture with full context | High | 1 hr |
-| ⬜ | `peekai.init()` auto-patches all installed SDKs | High | 1 hr |
-| ⬜ | `@peekai.trace()` decorator for agent runs | High | 1 hr |
-| ⬜ | Tool call tracking via decorator | Medium | 2 hrs |
-| ⬜ | Write unit tests for tracer and storage | Medium | 2 hrs |
+| ✅ | Create `Span` and `Trace` dataclasses | High | 1 hr |
+| ✅ | Build `Tracer` class with `ContextVar` for async safety | High | 2 hrs |
+| ✅ | Build `Storage` class with SQLite via `sqlite3` | High | 2 hrs |
+| ✅ | Implement OpenAI SDK monkey-patch | High | 3 hrs |
+| ✅ | Implement Anthropic SDK monkey-patch | High | 2 hrs |
+| ✅ | Implement LiteLLM monkey-patch | Medium | 2 hrs |
+| ✅ | Token tracking per span | High | 1 hr |
+| ✅ | Cost calculation per span per model | High | 1 hr |
+| ✅ | Error capture with full context | High | 1 hr |
+| ✅ | `peekai.init()` auto-patches all installed SDKs | High | 1 hr |
+| ✅ | `@peekai.trace()` decorator for agent runs | High | 1 hr |
+| ✅ | Tool call tracking via decorator | Medium | 2 hrs |
+| ✅ | Write unit tests for tracer and storage | Medium | 2 hrs |
 
 ---
 
