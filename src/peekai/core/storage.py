@@ -225,6 +225,33 @@ class Storage:
             "total_cost_usd": row["total_cost_usd"] or 0.0,
         }
 
+    def get_model_stats(self) -> list[dict[str, Any]]:
+        """Aggregate token + cost stats grouped by model, queried directly from spans."""
+        rows = self._conn.execute(
+            """
+            SELECT
+                model,
+                provider,
+                COUNT(*)            AS calls,
+                SUM(total_tokens)   AS tokens,
+                SUM(cost_usd)       AS cost_usd
+            FROM spans
+            WHERE model != ''
+            GROUP BY model, provider
+            ORDER BY cost_usd DESC
+            """
+        ).fetchall()
+        return [
+            {
+                "model": r["model"],
+                "provider": r["provider"],
+                "calls": r["calls"],
+                "tokens": r["tokens"] or 0,
+                "cost_usd": r["cost_usd"] or 0.0,
+            }
+            for r in rows
+        ]
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

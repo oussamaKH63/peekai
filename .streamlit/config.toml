@@ -10,3 +10,6 @@ headless = true
 
 [browser]
 gatherUsageStats = false
+
+[logger]
+level = "error"

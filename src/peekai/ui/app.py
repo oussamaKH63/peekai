@@ -58,6 +58,11 @@ def load_stats() -> dict:
     return storage.get_stats()
 
 
+@st.cache_data(ttl=10)
+def load_model_stats() -> list[dict]:
+    return storage.get_model_stats()
+
+
 # ── Formatters ────────────────────────────────────────────────────────────────
 def fmt_cost(v: float) -> str:
     return f"${v:.4f}" if v else "$0.0000"
@@ -191,17 +196,7 @@ if page == "📊 Dashboard":
     # ── Per-model breakdown ───────────────────────────────────────
     st.markdown(section_header("By model"), unsafe_allow_html=True)
 
-    model_stats: dict[str, dict] = {}
-    for t in traces:
-        for span in t.spans:
-            if not span.model:
-                continue
-            m = span.model
-            if m not in model_stats:
-                model_stats[m] = {"calls": 0, "tokens": 0, "cost": 0.0, "provider": span.provider}
-            model_stats[m]["calls"] += 1
-            model_stats[m]["tokens"] += span.total_tokens
-            model_stats[m]["cost"] += span.cost_usd
+    model_stats = load_model_stats()
 
     if model_stats:
         try:
@@ -210,19 +205,19 @@ if page == "📊 Dashboard":
             df = pd.DataFrame(
                 [
                     {
-                        "Model": m,
-                        "Provider": v["provider"] or "—",
-                        "Calls": v["calls"],
-                        "Tokens": f"{v['tokens']:,}",
-                        "Cost (USD)": fmt_cost_long(v["cost"]),
+                        "Model": m["model"],
+                        "Provider": m["provider"] or "—",
+                        "Calls": m["calls"],
+                        "Tokens": f"{m['tokens']:,}",
+                        "Cost (USD)": fmt_cost_long(m["cost_usd"]),
                     }
-                    for m, v in sorted(model_stats.items(), key=lambda x: x[1]["cost"], reverse=True)
+                    for m in model_stats
                 ]
             )
             st.dataframe(df, use_container_width=True, hide_index=True)
         except ImportError:
-            for m, v in model_stats.items():
-                st.text(f"{m}: {v['calls']} calls · {v['tokens']:,} tokens · {fmt_cost_long(v['cost'])}")
+            for m in model_stats:
+                st.text(f"{m['model']}: {m['calls']} calls · {m['tokens']:,} tokens · {fmt_cost_long(m['cost_usd'])}")
     else:
         st.caption("No model data yet.")
 
@@ -458,31 +453,38 @@ elif page == "🔎 Trace View":
         indent_px = "24px" if span.parent_span_id else "0px"
         span_ms = span.duration_ms or 0
         bar_pct = min((span_ms / total_ms) * 100, 100)
-
         bar_html = waterfall_bar(bar_pct, span.provider or span.kind.value, span.status.value)
         status_html = pill(span.status.value)
+        border_color = "#3f1515" if is_error else "#1e2535"
+        indent_arrow = '↳ ' if span.parent_span_id else ''
+
+        # Span header card — rendered outside expander so HTML works reliably
+        error_html = ""
+        if is_error and span.error:
+            error_html = (
+                f'<div style="margin-top:0.5rem;padding:0.4rem 0.75rem;background:#2d0a0a;'
+                f'border-radius:6px;font-size:0.8rem;color:#f87171">'
+                f'<strong>{span.error_type or "Error"}:</strong> {span.error}</div>'
+            )
 
         st.markdown(
-            f"""
-            <div style="margin-left:{indent_px};background:#161b27;border:1px solid {'#3f1515' if is_error else '#1e2535'};
-                        border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:0.5rem;">
-                <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.35rem;">
-                    {'<span style="color:#64748b;font-size:0.8rem">↳</span>' if span.parent_span_id else ''}
-                    <span style="font-weight:600;color:#e2e8f0;font-size:0.88rem">{span.name}</span>
-                    {status_html}
-                    <span style="font-size:0.72rem;color:#475569;margin-left:auto">
-                        {fmt_duration(span.duration_ms)}
-                        &nbsp;·&nbsp; {fmt_tokens(span.total_tokens)} tokens
-                        &nbsp;·&nbsp; <span style="color:#a78bfa">{fmt_cost_long(span.cost_usd)}</span>
-                    </span>
-                </div>
-                {bar_html}
-                {'<div style="margin-top:0.5rem;padding:0.5rem 0.75rem;background:#2d0a0a;border-radius:6px;font-size:0.8rem;color:#f87171"><strong>' + (span.error_type or "Error") + ':</strong> ' + (span.error or "") + '</div>' if is_error and span.error else ''}
-            </div>
-            """,
+            f'<div style="margin-left:{indent_px};background:#161b27;border:1px solid {border_color};'
+            f'border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:0.25rem;">'
+            f'<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.35rem;">'
+            f'<span style="color:#64748b;font-size:0.88rem;font-weight:600">{indent_arrow}{span.name}</span>'
+            f'{status_html}'
+            f'<span style="font-size:0.72rem;color:#475569;margin-left:auto">'
+            f'{fmt_duration(span.duration_ms)}'
+            f'&nbsp;·&nbsp;{fmt_tokens(span.total_tokens)} tokens'
+            f'&nbsp;·&nbsp;<span style="color:#a78bfa">{fmt_cost_long(span.cost_usd)}</span>'
+            f'</span></div>'
+            f'{bar_html}'
+            f'{error_html}'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
+        # Details in expander — only plain Streamlit widgets here (no unsafe HTML)
         with st.expander(f"Details — {span.name}", expanded=is_error):
             tab_in, tab_out, tab_tools, tab_raw = st.tabs(
                 ["📨 Input", "💬 Output", "🔧 Tool Calls", "📄 Raw"]
@@ -495,15 +497,18 @@ elif page == "🔎 Trace View":
                         content = msg.get("content", "")
                         safe_role = role if role in ("user", "assistant", "system") else "user"
                         with st.chat_message(safe_role):
-                            st.markdown(str(content))
+                            st.write(str(content))
                 else:
                     st.caption("No input recorded.")
 
             with tab_out:
                 if span.output:
-                    st.markdown(
-                        f"<div style='background:#1e2535;border-radius:8px;padding:1rem;font-size:0.88rem;color:#e2e8f0;line-height:1.6'>{span.output}</div>",
-                        unsafe_allow_html=True,
+                    st.text_area(
+                        "output",
+                        value=span.output,
+                        height=150,
+                        disabled=True,
+                        label_visibility="collapsed",
                     )
                 else:
                     st.caption("No output recorded.")
@@ -511,13 +516,7 @@ elif page == "🔎 Trace View":
             with tab_tools:
                 if span.tool_calls:
                     for tc in span.tool_calls:
-                        st.markdown(
-                            f"<div style='font-weight:600;color:#7dd3fc;font-size:0.85rem;margin-bottom:0.3rem'>"
-                            f"⚙ {tc.get('function', '?')}"
-                            f"&nbsp;&nbsp;<code style='font-size:0.72rem'>{tc.get('id', '')}</code>"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
+                        st.write(f"**⚙ {tc.get('function', '?')}**  `{tc.get('id', '')}`")
                         args = tc.get("arguments", "")
                         if args:
                             try:
@@ -525,7 +524,7 @@ elif page == "🔎 Trace View":
                                 st.json(parsed)
                             except Exception:
                                 st.code(str(args), language="text")
-                        st.markdown("<hr style='border-color:#1e2535;margin:0.5rem 0'>", unsafe_allow_html=True)
+                        st.divider()
                 else:
                     st.caption("No tool calls.")
 
@@ -534,3 +533,5 @@ elif page == "🔎 Trace View":
                     st.json(span.raw_response)
                 else:
                     st.caption("No raw response recorded.")
+
+        st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)

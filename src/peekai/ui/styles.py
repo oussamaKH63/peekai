@@ -235,25 +235,39 @@ hr { border-color: #1e2535 !important; }
 
 
 def pill(status: str) -> str:
-    cls = f"pill-{status}"
+    styles = {
+        "ok":      "background:#14532d;color:#4ade80;border:1px solid #166534",
+        "error":   "background:#450a0a;color:#f87171;border:1px solid #7f1d1d",
+        "pending": "background:#451a03;color:#fb923c;border:1px solid #7c2d12",
+    }
     icons = {"ok": "✓", "error": "✗", "pending": "⏳"}
+    style = styles.get(status, "background:#1e2535;color:#94a3b8;border:1px solid #334155")
     icon = icons.get(status, "")
-    return f'<span class="pill {cls}">{icon} {status}</span>'
+    return (
+        f'<span style="display:inline-block;padding:2px 10px;border-radius:999px;'
+        f'font-size:0.72rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;{style}">'
+        f'{icon} {status}</span>'
+    )
 
 
 def kpi_card(label: str, value: str, sub: str = "") -> str:
-    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
-    return f"""
-    <div class="kpi-card">
-        <div class="kpi-label">{label}</div>
-        <div class="kpi-value">{value}</div>
-        {sub_html}
-    </div>
-    """
+    sub_html = f'<div style="font-size:0.72rem;color:#475569;margin-top:0.3rem">{sub}</div>' if sub else ""
+    return (
+        f'<div style="background:#161b27;border:1px solid #1e2535;border-radius:12px;'
+        f'padding:1.25rem 1.5rem;text-align:center">'
+        f'<div style="font-size:0.7rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:0.4rem">{label}</div>'
+        f'<div style="font-size:1.8rem;font-weight:800;color:#f1f5f9;line-height:1">{value}</div>'
+        f'{sub_html}'
+        f'</div>'
+    )
 
 
 def section_header(title: str) -> str:
-    return f'<div class="section-header">{title}</div>'
+    return (
+        f'<div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;'
+        f'color:#475569;margin:1.5rem 0 0.75rem 0;padding-bottom:0.4rem;border-bottom:1px solid #1e2535">'
+        f'{title}</div>'
+    )
 
 
 def bar_class(provider: str, status: str) -> str:
@@ -269,9 +283,21 @@ def bar_class(provider: str, status: str) -> str:
 
 
 def waterfall_bar(pct: float, provider: str, status: str) -> str:
-    cls = bar_class(provider, status)
-    return f"""
-    <div class="bar-track">
-        <div class="bar-fill {cls}" style="width:{max(pct, 2):.1f}%"></div>
-    </div>
-    """
+    gradients = {
+        "error":     "linear-gradient(90deg,#ef4444,#f87171)",
+        "openai":    "linear-gradient(90deg,#10b981,#34d399)",
+        "anthropic": "linear-gradient(90deg,#f59e0b,#fbbf24)",
+        "litellm":   "linear-gradient(90deg,#8b5cf6,#a78bfa)",
+        "tool":      "linear-gradient(90deg,#3b82f6,#60a5fa)",
+    }
+    if status == "error":
+        gradient = gradients["error"]
+    else:
+        gradient = gradients.get(provider.lower(), "linear-gradient(90deg,#475569,#64748b)")
+
+    width = max(pct, 2)
+    return (
+        f'<div style="background:#1e2535;border-radius:4px;height:8px;width:100%;overflow:hidden;margin-top:0.4rem">'
+        f'<div style="height:100%;border-radius:4px;min-width:4px;width:{width:.1f}%;background:{gradient}"></div>'
+        f'</div>'
+    )
