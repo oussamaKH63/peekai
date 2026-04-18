@@ -15,6 +15,7 @@ import typer
 
 from peekai.cli.commands.clear import clear
 from peekai.cli.commands.list_traces import list_traces
+from peekai.cli.commands.replay import replay
 from peekai.cli.commands.stats import stats
 from peekai.cli.commands.ui import ui
 from peekai.cli.commands.view import view
@@ -31,6 +32,7 @@ app.command("view")(view)
 app.command("stats")(stats)
 app.command("clear")(clear)
 app.command("ui")(ui)
+app.command("replay")(replay)
 
 
 if __name__ == "__main__":

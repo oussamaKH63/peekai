@@ -84,11 +84,11 @@
 
 | Status | Task | Priority | Effort |
 |--------|------|----------|--------|
-| ⬜ | Store full prompt + response per span in SQLite | High | 1 hr |
-| ⬜ | `peekai replay <trace-id>` CLI command | High | 3 hrs |
-| ⬜ | Replay with model swap (GPT-4o vs Claude) | High | 3 hrs |
-| ⬜ | Replay with modified tool response | Medium | 4 hrs |
-| ⬜ | Side by side original vs replayed trace in UI | Medium | 3 hrs |
+| ✅ | Store full prompt + response per span in SQLite | High | 1 hr |
+| ✅ | `peekai replay <trace-id>` CLI command | High | 3 hrs |
+| ✅ | Replay with model swap (GPT-4o vs Claude) | High | 3 hrs |
+| ✅ | Replay with modified tool response | Medium | 4 hrs |
+| ✅ | Side by side original vs replayed trace in UI | Medium | 3 hrs |
 
 ---
 

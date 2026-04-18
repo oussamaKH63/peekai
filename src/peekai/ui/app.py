@@ -1,10 +1,11 @@
 """
-PeekAI Streamlit Dashboard — Phase 3 (polished)
+PeekAI Streamlit Dashboard — Phase 3 + 4
 
 Pages:
   📊 Dashboard  — KPIs, cost over time, per-model breakdown
   🔍 Traces     — filterable trace list
   🔎 Trace View — span waterfall with duration bars, I/O tabs, error highlighting
+  🔁 Replay     — re-run a trace with model swap, side-by-side comparison
 """
 
 from __future__ import annotations
@@ -99,7 +100,7 @@ with st.sidebar:
 
     page = st.radio(
         "nav",
-        ["📊 Dashboard", "🔍 Traces", "🔎 Trace View"],
+        ["📊 Dashboard", "🔍 Traces", "🔎 Trace View", "🔁 Replay"],
         label_visibility="collapsed",
     )
 
@@ -535,3 +536,187 @@ elif page == "🔎 Trace View":
                     st.caption("No raw response recorded.")
 
         st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Replay
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🔁 Replay":
+    st.markdown("## Replay")
+    st.markdown(
+        "<div style='color:#64748b;font-size:0.88rem;margin-bottom:1.5rem'>"
+        "Re-run any past trace with a different model or modified tool responses. "
+        "Results are saved as a new trace and shown side by side."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Config form ───────────────────────────────────────────────
+    with st.form("replay_form"):
+        r1, r2 = st.columns([3, 2])
+        trace_id_input = r1.text_input(
+            "Trace ID",
+            placeholder="Paste trace ID or first 8 chars…",
+            label_visibility="visible",
+        )
+        model_override = r2.text_input(
+            "Model override (optional)",
+            placeholder="e.g. gpt-4o or claude-3-5-sonnet-20241022",
+            label_visibility="visible",
+        )
+        a1, a2 = st.columns([2, 3])
+        api_key_input = a1.text_input(
+            "API Key (optional)",
+            placeholder="sk-… (or set OPENAI_API_KEY env var)",
+            type="password",
+            label_visibility="visible",
+        )
+        base_url_input = a2.text_input(
+            "Base URL (optional)",
+            placeholder="https://api.openai.com/v1 or custom endpoint",
+            label_visibility="visible",
+        )
+        submitted = st.form_submit_button("▶ Run Replay", type="primary", use_container_width=True)
+
+    if not submitted or not trace_id_input:
+        st.stop()
+
+    # ── Run replay ────────────────────────────────────────────────
+    from peekai.replay.engine import ReplayEngine
+
+    engine = ReplayEngine(
+        storage=storage,
+        model_override=model_override.strip() or None,
+        api_key=api_key_input.strip() or None,
+        base_url=base_url_input.strip() or None,
+    )
+
+    with st.spinner("Replaying trace…"):
+        try:
+            result = engine.replay(trace_id_input.strip())
+        except ValueError as e:
+            st.error(str(e))
+            st.stop()
+        except Exception as e:
+            st.error(f"Replay failed: {e}")
+            st.stop()
+
+    orig = result.original
+    rep = result.replayed
+
+    st.success(f"Replay complete — saved as `{rep.trace_id[:8]}`")
+    st.divider()
+
+    # ── Summary metrics ───────────────────────────────────────────
+    st.markdown(section_header("Summary"), unsafe_allow_html=True)
+
+    tok_delta = rep.total_tokens - orig.total_tokens
+    cost_delta = rep.total_cost_usd - orig.total_cost_usd
+    dur_orig = orig.duration_ms or 0
+    dur_rep = rep.duration_ms or 0
+
+    def delta_html(val: float, fmt: str = "+.0f") -> str:
+        color = "#4ade80" if val <= 0 else "#f87171"
+        sign = "+" if val > 0 else ""
+        return f'<span style="font-size:0.75rem;color:{color};font-weight:600">{sign}{val:{fmt[1:]}}</span>'
+
+    def summary_card(label: str, value: str, delta: str = "") -> str:
+        delta_row = f'<div style="margin-top:0.3rem;min-height:1.2rem">{delta}</div>' if delta else '<div style="min-height:1.2rem;margin-top:0.3rem"></div>'
+        return (
+            f'<div style="background:#161b27;border:1px solid #1e2535;border-radius:10px;'
+            f'padding:1rem 1.25rem;height:100px;display:flex;flex-direction:column;justify-content:center">'
+            f'<div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">{label}</div>'
+            f'<div style="font-size:1.3rem;font-weight:700;color:#f1f5f9;white-space:nowrap">{value}</div>'
+            f'{delta_row}'
+            f'</div>'
+        )
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.markdown(summary_card("Orig tokens", fmt_tokens(orig.total_tokens)), unsafe_allow_html=True)
+    c2.markdown(summary_card("New tokens", fmt_tokens(rep.total_tokens), delta_html(tok_delta)), unsafe_allow_html=True)
+    c3.markdown(summary_card("Orig cost", fmt_cost_long(orig.total_cost_usd)), unsafe_allow_html=True)
+    c4.markdown(summary_card("New cost", fmt_cost_long(rep.total_cost_usd), delta_html(cost_delta, "+.6f")), unsafe_allow_html=True)
+    c5.markdown(summary_card("Orig duration", fmt_duration(dur_orig)), unsafe_allow_html=True)
+    c6.markdown(summary_card("New duration", fmt_duration(dur_rep), delta_html(dur_rep - dur_orig)), unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── Side-by-side span comparison ──────────────────────────────
+    st.markdown(section_header("Span comparison"), unsafe_allow_html=True)
+
+    from peekai.core.models import SpanKind
+
+    for orig_span, rep_span in result.span_pairs:
+        if orig_span.kind != SpanKind.LLM:
+            st.markdown(
+                f'<div style="color:#475569;font-size:0.8rem;margin:0.3rem 0">'
+                f'⊘ <em>{orig_span.name}</em> — skipped (not an LLM span)</div>',
+                unsafe_allow_html=True,
+            )
+            continue
+
+        st.markdown(
+            f'<div style="font-weight:600;color:#e2e8f0;font-size:0.9rem;margin:0.75rem 0 0.4rem 0">'
+            f'{orig_span.name}</div>',
+            unsafe_allow_html=True,
+        )
+
+        col_orig, col_rep = st.columns(2)
+
+        # Original span
+        with col_orig:
+            st.markdown(
+                f'<div style="background:#161b27;border:1px solid #1e2535;border-radius:8px;padding:0.75rem 1rem">'
+                f'<div style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Original</div>'
+                f'<div style="font-size:0.78rem;color:#7dd3fc;margin-bottom:0.3rem">{orig_span.model}</div>'
+                f'<div style="font-size:0.75rem;color:#64748b">'
+                f'{fmt_tokens(orig_span.total_tokens)} tokens &nbsp;·&nbsp; '
+                f'<span style="color:#a78bfa">{fmt_cost_long(orig_span.cost_usd)}</span> &nbsp;·&nbsp; '
+                f'{fmt_duration(orig_span.duration_ms)}'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            if orig_span.output:
+                st.text_area(
+                    "orig_out",
+                    value=orig_span.output,
+                    height=160,
+                    disabled=True,
+                    label_visibility="collapsed",
+                    key=f"orig_{orig_span.span_id}",
+                )
+
+        # Replayed span
+        with col_rep:
+            if rep_span:
+                is_err = rep_span.status == SpanStatus.ERROR
+                border = "#3f1515" if is_err else "#1e2535"
+                st.markdown(
+                    f'<div style="background:#161b27;border:1px solid {border};border-radius:8px;padding:0.75rem 1rem">'
+                    f'<div style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Replayed</div>'
+                    f'<div style="font-size:0.78rem;color:#7dd3fc;margin-bottom:0.3rem">{rep_span.model}</div>'
+                    f'<div style="font-size:0.75rem;color:#64748b">'
+                    f'{fmt_tokens(rep_span.total_tokens)} tokens &nbsp;·&nbsp; '
+                    f'<span style="color:#a78bfa">{fmt_cost_long(rep_span.cost_usd)}</span> &nbsp;·&nbsp; '
+                    f'{fmt_duration(rep_span.duration_ms)}'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+                if is_err and rep_span.error:
+                    st.error(f"{rep_span.error_type}: {rep_span.error}")
+                elif rep_span.output:
+                    st.text_area(
+                        "rep_out",
+                        value=rep_span.output,
+                        height=160,
+                        disabled=True,
+                        label_visibility="collapsed",
+                        key=f"rep_{rep_span.span_id}",
+                    )
+            else:
+                st.markdown(
+                    '<div style="color:#475569;font-size:0.8rem;padding:1rem">No replay data.</div>',
+                    unsafe_allow_html=True,
+                )
+
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)

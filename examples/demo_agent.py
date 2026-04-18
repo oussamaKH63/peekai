@@ -21,6 +21,10 @@ API_KEY  = os.getenv("PEEKAI_DEMO_KEY", "sk-MtQLEYr9nuJJwUOvgxYE6VGrs0LkqXOzCLZG
 BASE_URL = os.getenv("PEEKAI_DEMO_URL", "https://api.chatanywhere.tech/v1")
 MODEL    = "gpt-3.5-turbo"
 
+# Set env vars so the replay engine picks them up automatically
+os.environ.setdefault("OPENAI_API_KEY", API_KEY)
+os.environ.setdefault("OPENAI_BASE_URL", BASE_URL)
+
 # ── Init PeekAI ───────────────────────────────────────────────────────────────
 peekai.init()
 
