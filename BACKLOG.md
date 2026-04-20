@@ -109,10 +109,10 @@
 
 | Status | Task | Priority | Effort |
 |--------|------|----------|--------|
-| ⬜ | Write proper README with badges + demo gif | High | 2 hrs |
+| ✅ | Write proper README with badges + demo gif | High | 2 hrs |
 | ⬜ | Record demo gif with a real agent example | High | 1 hr |
-| ⬜ | Write `CONTRIBUTING.md` | Medium | 1 hr |
-| ⬜ | Publish to PyPI | High | 1 hr |
+| ✅ | Write `CONTRIBUTING.md` | Medium | 1 hr |
+| 🔵 | Publish to PyPI | High | 1 hr |
 | ⬜ | Post on HackerNews — Show HN | High | 30 min |
 | ⬜ | Post on Reddit r/LocalLLaMA + r/Python | High | 30 min |
 | ⬜ | Post demo gif on X/Twitter | High | 15 min |

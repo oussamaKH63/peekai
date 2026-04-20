@@ -7,9 +7,13 @@ Commands:
     peekai stats             — total cost, tokens, runs
     peekai clear             — wipe local storage
     peekai ui                — launch Streamlit UI
+    peekai replay <trace-id> — re-run a past trace
+    peekai map <trace-id>    — ASCII agent flow tree
 """
 
 from __future__ import annotations
+
+from typing import Annotated
 
 import typer
 
@@ -21,12 +25,31 @@ from peekai.cli.commands.stats import stats
 from peekai.cli.commands.ui import ui
 from peekai.cli.commands.view import view
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        from peekai import __version__
+        typer.echo(f"peekai {__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(
     name="peekai",
     help="👀 Lightweight, local-first observability for Python AI agents.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option("--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit."),
+    ] = False,
+) -> None:
+    pass
+
 
 app.command("list")(list_traces)
 app.command("view")(view)

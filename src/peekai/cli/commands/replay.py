@@ -9,12 +9,10 @@ Examples:
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 from rich.table import Table
-from rich.text import Text
 
 from peekai.cli.console import console, get_storage
 from peekai.core.models import SpanKind, SpanStatus
@@ -153,12 +151,12 @@ def replay(
         if rep_span:
             # Show output diff
             if orig_span.output != rep_span.output:
-                console.print(f"    [dim]── original output ──[/dim]")
+                console.print("    [dim]── original output ──[/dim]")
                 console.print(f"    {orig_span.output[:200]}{'…' if len(orig_span.output) > 200 else ''}")
-                console.print(f"    [dim]── replayed output ──[/dim]")
+                console.print("    [dim]── replayed output ──[/dim]")
                 console.print(f"    {rep_span.output[:200]}{'…' if len(rep_span.output) > 200 else ''}")
             else:
-                console.print(f"    [dim]Output unchanged.[/dim]")
+                console.print("    [dim]Output unchanged.[/dim]")
 
             tok_diff = rep_span.total_tokens - orig_span.total_tokens
             cost_diff = rep_span.cost_usd - orig_span.cost_usd

@@ -17,13 +17,13 @@ if TYPE_CHECKING:
 _patched = False
 
 
-def patch(tracer: "Tracer") -> None:
+def patch(tracer: Tracer) -> None:
     global _patched
     if _patched:
         return
 
     try:
-        from anthropic.resources.messages import Messages, AsyncMessages
+        from anthropic.resources.messages import AsyncMessages, Messages
     except ImportError:
         return  # anthropic not installed — skip silently
 
@@ -37,7 +37,7 @@ def unpatch() -> None:
     if not _patched:
         return
     try:
-        from anthropic.resources.messages import Messages, AsyncMessages
+        from anthropic.resources.messages import AsyncMessages, Messages
         if hasattr(Messages, "_peekai_original_create"):
             Messages.create = Messages._peekai_original_create  # type: ignore[attr-defined]
             del Messages._peekai_original_create  # type: ignore[attr-defined]
@@ -53,7 +53,7 @@ def unpatch() -> None:
 # Sync patch
 # ------------------------------------------------------------------
 
-def _patch_sync(Messages: Any, tracer: "Tracer") -> None:
+def _patch_sync(Messages: Any, tracer: Tracer) -> None:
     original = Messages.create
     Messages._peekai_original_create = original  # type: ignore[attr-defined]
 
@@ -89,7 +89,7 @@ def _patch_sync(Messages: Any, tracer: "Tracer") -> None:
 # Async patch
 # ------------------------------------------------------------------
 
-def _patch_async(AsyncMessages: Any, tracer: "Tracer") -> None:
+def _patch_async(AsyncMessages: Any, tracer: Tracer) -> None:
     original = AsyncMessages.create
     AsyncMessages._peekai_original_create = original  # type: ignore[attr-defined]
 

@@ -75,7 +75,6 @@ def map_trace(
     console.print()
 
     # ── Build parent→children map ─────────────────────────────────
-    span_map: dict[str, Span] = {s.span_id: s for s in trace.spans}
     children: dict[str | None, list[Span]] = {}
     for span in trace.spans:
         parent_id = span.parent_span_id

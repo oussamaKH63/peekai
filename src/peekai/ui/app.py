@@ -11,13 +11,22 @@ Pages:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import streamlit as st
 
-from peekai.core.models import SpanKind, SpanStatus, Trace
+from peekai.core.models import (
+    Span,  # noqa: F401 — used in get_depth annotation
+    SpanKind,
+    SpanStatus,
+    Trace,
+)
 from peekai.core.storage import Storage
 from peekai.ui.styles import (
     GLOBAL_CSS,
+    LOGO_URI,
+    LOGO_FULL_URI,
+    ICON_URI,
     kpi_card,
     pill,
     section_header,
@@ -26,8 +35,8 @@ from peekai.ui.styles import (
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="PeekAI",
-    page_icon="👀",
+    page_title="peekai",
+    page_icon=ICON_URI,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -85,16 +94,19 @@ def fmt_duration(ms: float | None) -> str:
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
+    # Logo
+    logo_path = Path(__file__).parent / "peekai-logo.png"
+    if logo_path.exists():
+        import base64
+        logo_b64 = base64.b64encode(logo_path.read_bytes()).decode()
+        st.markdown(
+            f'<img src="data:image/png;base64,{logo_b64}" '
+            f'style="width:160px; height:auto; display:block; margin:0 0 0.25rem 0;" />',
+            unsafe_allow_html=True,
+        )
     st.markdown(
-        """
-        <div style="padding: 0.5rem 0 1rem 0;">
-            <span style="font-size:1.6rem;">👀</span>
-            <span style="font-size:1.1rem; font-weight:800; color:#f1f5f9; margin-left:0.4rem;">PeekAI</span>
-            <div style="font-size:0.7rem; color:#475569; margin-top:0.1rem; letter-spacing:0.05em;">
-                LOCAL-FIRST AI OBSERVABILITY
-            </div>
-        </div>
-        """,
+        "<div style='font-size:0.65rem; color:#94a3b8; letter-spacing:0.05em; margin-bottom:1rem;'>"
+        "LOCAL-FIRST AI OBSERVABILITY</div>",
         unsafe_allow_html=True,
     )
 
@@ -122,21 +134,21 @@ with st.sidebar:
     stats_sb = load_stats()
     st.markdown(
         f"""
-        <div style="font-size:0.7rem; color:#475569; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem;">
+        <div style="font-size:0.7rem; color:#94a3b8; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.5rem;">
             Quick stats
         </div>
         <div style="display:flex; flex-direction:column; gap:0.3rem;">
             <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
                 <span style="color:#64748b;">Runs</span>
-                <span style="color:#e2e8f0; font-weight:600;">{stats_sb['total_runs']}</span>
+                <span style="color:#0f172a; font-weight:600;">{stats_sb['total_runs']}</span>
             </div>
             <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
                 <span style="color:#64748b;">Tokens</span>
-                <span style="color:#e2e8f0; font-weight:600;">{stats_sb['total_tokens']:,}</span>
+                <span style="color:#0f172a; font-weight:600;">{stats_sb['total_tokens']:,}</span>
             </div>
             <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
                 <span style="color:#64748b;">Cost</span>
-                <span style="color:#a78bfa; font-weight:600;">{fmt_cost(stats_sb['total_cost_usd'])}</span>
+                <span style="color:#ff6600; font-weight:600;">{fmt_cost(stats_sb['total_cost_usd'])}</span>
             </div>
         </div>
         """,
@@ -235,9 +247,9 @@ if page == "📊 Dashboard":
         )
         col_info.markdown(
             f"<div style='padding-top:4px'>"
-            f"<span style='font-weight:600;color:#e2e8f0'>{t.name}</span>"
+            f"<span style='font-weight:600;color:#0f172a'>{t.name}</span>"
             f"&nbsp;&nbsp;<code>{t.trace_id[:8]}</code>"
-            f"<div style='font-size:0.72rem;color:#475569;margin-top:2px'>{started}</div>"
+            f"<div style='font-size:0.72rem;color:#94a3b8;margin-top:2px'>{started}</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -246,22 +258,22 @@ if page == "📊 Dashboard":
             unsafe_allow_html=True,
         )
         col_tokens.markdown(
-            f"<div style='padding-top:6px;font-size:0.82rem;color:#94a3b8'>{fmt_tokens(t.total_tokens)}</div>",
+            f"<div style='padding-top:6px;font-size:0.82rem;color:#64748b'>{fmt_tokens(t.total_tokens)}</div>",
             unsafe_allow_html=True,
         )
         col_cost.markdown(
-            f"<div style='padding-top:6px;font-size:0.82rem;color:#a78bfa'>{fmt_cost_long(t.total_cost_usd)}</div>",
+            f"<div style='padding-top:6px;font-size:0.82rem;color:#ff6600'>{fmt_cost_long(t.total_cost_usd)}</div>",
             unsafe_allow_html=True,
         )
         col_dur.markdown(
-            f"<div style='padding-top:6px;font-size:0.82rem;color:#64748b'>{duration}</div>",
+            f"<div style='padding-top:6px;font-size:0.82rem;color:#94a3b8'>{duration}</div>",
             unsafe_allow_html=True,
         )
         if col_btn.button("View", key=f"dash_view_{t.trace_id}"):
             st.session_state["selected_trace_id"] = t.trace_id
             st.rerun()
 
-        st.markdown("<hr style='margin:0.4rem 0;border-color:#1e2535'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin:0.4rem 0;border-color:#e2e8f0'>", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -303,11 +315,11 @@ elif page == "🔍 Traces":
         ["Name", "Status", "Spans", "Tokens", "Cost", "Started", ""],
     ):
         col.markdown(
-            f"<div style='font-size:0.68rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#475569'>{label}</div>",
+            f"<div style='font-size:0.68rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8'>{label}</div>",
             unsafe_allow_html=True,
         )
 
-    st.markdown("<hr style='margin:0.3rem 0;border-color:#1e2535'>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:0.3rem 0;border-color:#e2e8f0'>", unsafe_allow_html=True)
 
     # ── Rows ──────────────────────────────────────────────────────
     for t in filtered:
@@ -315,7 +327,7 @@ elif page == "🔍 Traces":
 
         c1.markdown(
             f"<div style='padding-top:4px'>"
-            f"<span style='font-weight:600;color:#e2e8f0;font-size:0.88rem'>{t.name}</span>"
+            f"<span style='font-weight:600;color:#0f172a;font-size:0.88rem'>{t.name}</span>"
             f"&nbsp;<code>{t.trace_id[:8]}</code>"
             f"</div>",
             unsafe_allow_html=True,
@@ -333,18 +345,18 @@ elif page == "🔍 Traces":
             unsafe_allow_html=True,
         )
         c5.markdown(
-            f"<div style='padding-top:6px;font-size:0.82rem;color:#a78bfa'>{fmt_cost_long(t.total_cost_usd)}</div>",
+            f"<div style='padding-top:6px;font-size:0.82rem;color:#ff6600'>{fmt_cost_long(t.total_cost_usd)}</div>",
             unsafe_allow_html=True,
         )
         c6.markdown(
-            f"<div style='padding-top:6px;font-size:0.75rem;color:#475569'>{t.started_at.strftime('%m-%d %H:%M:%S')}</div>",
+            f"<div style='padding-top:6px;font-size:0.75rem;color:#94a3b8'>{t.started_at.strftime('%m-%d %H:%M:%S')}</div>",
             unsafe_allow_html=True,
         )
         if c7.button("→", key=f"list_view_{t.trace_id}"):
             st.session_state["selected_trace_id"] = t.trace_id
             st.rerun()
 
-        st.markdown("<hr style='margin:0.25rem 0;border-color:#1e2535'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin:0.25rem 0;border-color:#e2e8f0'>", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -387,24 +399,24 @@ elif page == "🔎 Trace View":
     # ── Trace header ──────────────────────────────────────────────
     st.markdown(
         f"""
-        <div style="background:#161b27;border:1px solid #1e2535;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.25rem;">
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.25rem;">
             <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.6rem;">
-                <span style="font-size:1.1rem;font-weight:800;color:#f1f5f9">{trace.name}</span>
+                <span style="font-size:1.1rem;font-weight:800;color:#0f172a">{trace.name}</span>
                 {pill(trace.status.value)}
             </div>
             <div style="display:flex;gap:2rem;flex-wrap:wrap;">
-                <div><span style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Trace ID</span><br>
+                <div><span style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em">Trace ID</span><br>
                     <code style="font-size:0.78rem">{trace.trace_id}</code></div>
-                <div><span style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Started</span><br>
-                    <span style="font-size:0.82rem;color:#94a3b8">{trace.started_at.strftime("%Y-%m-%d %H:%M:%S UTC")}</span></div>
-                <div><span style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Duration</span><br>
-                    <span style="font-size:0.82rem;color:#94a3b8">{fmt_duration(trace.duration_ms)}</span></div>
-                <div><span style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Spans</span><br>
-                    <span style="font-size:0.82rem;color:#94a3b8">{len(trace.spans)}</span></div>
-                <div><span style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Tokens</span><br>
-                    <span style="font-size:0.82rem;color:#94a3b8">{fmt_tokens(trace.total_tokens)}</span></div>
-                <div><span style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Cost</span><br>
-                    <span style="font-size:0.82rem;color:#a78bfa;font-weight:600">{fmt_cost_long(trace.total_cost_usd)}</span></div>
+                <div><span style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em">Started</span><br>
+                    <span style="font-size:0.82rem;color:#64748b">{trace.started_at.strftime("%Y-%m-%d %H:%M:%S UTC")}</span></div>
+                <div><span style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em">Duration</span><br>
+                    <span style="font-size:0.82rem;color:#64748b">{fmt_duration(trace.duration_ms)}</span></div>
+                <div><span style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em">Spans</span><br>
+                    <span style="font-size:0.82rem;color:#64748b">{len(trace.spans)}</span></div>
+                <div><span style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em">Tokens</span><br>
+                    <span style="font-size:0.82rem;color:#64748b">{fmt_tokens(trace.total_tokens)}</span></div>
+                <div><span style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em">Cost</span><br>
+                    <span style="font-size:0.82rem;color:#ff6600;font-weight:600">{fmt_cost_long(trace.total_cost_usd)}</span></div>
             </div>
         </div>
         """,
@@ -447,7 +459,7 @@ elif page == "🔎 Trace View":
     # Build depth map for proper tree indentation
     span_map = {s.span_id: s for s in trace.spans}
 
-    def get_depth(span: "Span") -> int:
+    def get_depth(span: Span) -> int:
         depth = 0
         current = span
         while current.parent_span_id and current.parent_span_id in span_map:
@@ -477,32 +489,32 @@ elif page == "🔎 Trace View":
         bar_pct = min((span_ms / total_ms) * 100, 100)
         bar_html = waterfall_bar(bar_pct, span.provider or span.kind.value, span.status.value)
         status_html = pill(span.status.value)
-        border_color = "#3f1515" if is_error else ("#2d2008" if is_agent else "#1e2535")
+        border_color = "#fecaca" if is_error else ("#fed7aa" if is_agent else "#e2e8f0")
         icon = kind_icons.get(span.kind.value, "•")
-        name_color = kind_colors.get(span.kind.value, "#e2e8f0")
+        name_color = kind_colors.get(span.kind.value, "#0f172a")
         tree_prefix = "└─ " if depth > 0 else ""
 
         error_html = ""
         if is_error and span.error:
             error_html = (
-                f'<div style="margin-top:0.5rem;padding:0.4rem 0.75rem;background:#2d0a0a;'
-                f'border-radius:6px;font-size:0.8rem;color:#f87171">'
+                f'<div style="margin-top:0.5rem;padding:0.4rem 0.75rem;background:#fee2e2;'
+                f'border-radius:6px;font-size:0.8rem;color:#dc2626">'
                 f'<strong>{span.error_type or "Error"}:</strong> {span.error}</div>'
             )
 
         st.markdown(
-            f'<div style="margin-left:{indent_px}px;background:#161b27;border:1px solid {border_color};'
+            f'<div style="margin-left:{indent_px}px;background:#ffffff;border:1px solid {border_color};'
             f'border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:0.25rem;">'
             f'<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.35rem;">'
-            f'<span style="color:#475569;font-size:0.8rem">{tree_prefix}</span>'
+            f'<span style="color:#94a3b8;font-size:0.8rem">{tree_prefix}</span>'
             f'<span style="font-size:0.9rem">{icon}</span>'
             f'<span style="color:{name_color};font-size:0.88rem;font-weight:600">{span.name}</span>'
-            f'<span style="font-size:0.68rem;color:#475569;background:#1e2535;padding:1px 6px;border-radius:4px">{span.kind.value}</span>'
+            f'<span style="font-size:0.68rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:4px">{span.kind.value}</span>'
             f'{status_html}'
-            f'<span style="font-size:0.72rem;color:#475569;margin-left:auto">'
+            f'<span style="font-size:0.72rem;color:#94a3b8;margin-left:auto">'
             f'{fmt_duration(span.duration_ms)}'
             f'&nbsp;·&nbsp;{fmt_tokens(span.total_tokens)} tokens'
-            f'&nbsp;·&nbsp;<span style="color:#a78bfa">{fmt_cost_long(span.cost_usd)}</span>'
+            f'&nbsp;·&nbsp;<span style="color:#ff6600">{fmt_cost_long(span.cost_usd)}</span>'
             f'</span></div>'
             f'{bar_html}'
             f'{error_html}'
@@ -666,10 +678,10 @@ elif page == "🔁 Replay":
     def summary_card(label: str, value: str, delta: str = "") -> str:
         delta_row = f'<div style="margin-top:0.3rem;min-height:1.2rem">{delta}</div>' if delta else '<div style="min-height:1.2rem;margin-top:0.3rem"></div>'
         return (
-            f'<div style="background:#161b27;border:1px solid #1e2535;border-radius:10px;'
+            f'<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;'
             f'padding:1rem 1.25rem;height:100px;display:flex;flex-direction:column;justify-content:center">'
-            f'<div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">{label}</div>'
-            f'<div style="font-size:1.3rem;font-weight:700;color:#f1f5f9;white-space:nowrap">{value}</div>'
+            f'<div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.35rem">{label}</div>'
+            f'<div style="font-size:1.3rem;font-weight:700;color:#0f172a;white-space:nowrap">{value}</div>'
             f'{delta_row}'
             f'</div>'
         )
@@ -692,14 +704,14 @@ elif page == "🔁 Replay":
     for orig_span, rep_span in result.span_pairs:
         if orig_span.kind != SpanKind.LLM:
             st.markdown(
-                f'<div style="color:#475569;font-size:0.8rem;margin:0.3rem 0">'
+                f'<div style="color:#94a3b8;font-size:0.8rem;margin:0.3rem 0">'
                 f'⊘ <em>{orig_span.name}</em> — skipped (not an LLM span)</div>',
                 unsafe_allow_html=True,
             )
             continue
 
         st.markdown(
-            f'<div style="font-weight:600;color:#e2e8f0;font-size:0.9rem;margin:0.75rem 0 0.4rem 0">'
+            f'<div style="font-weight:600;color:#0f172a;font-size:0.9rem;margin:0.75rem 0 0.4rem 0">'
             f'{orig_span.name}</div>',
             unsafe_allow_html=True,
         )
@@ -709,12 +721,12 @@ elif page == "🔁 Replay":
         # Original span
         with col_orig:
             st.markdown(
-                f'<div style="background:#161b27;border:1px solid #1e2535;border-radius:8px;padding:0.75rem 1rem">'
-                f'<div style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Original</div>'
-                f'<div style="font-size:0.78rem;color:#7dd3fc;margin-bottom:0.3rem">{orig_span.model}</div>'
+                f'<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem 1rem">'
+                f'<div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Original</div>'
+                f'<div style="font-size:0.78rem;color:#001f5b;margin-bottom:0.3rem">{orig_span.model}</div>'
                 f'<div style="font-size:0.75rem;color:#64748b">'
                 f'{fmt_tokens(orig_span.total_tokens)} tokens &nbsp;·&nbsp; '
-                f'<span style="color:#a78bfa">{fmt_cost_long(orig_span.cost_usd)}</span> &nbsp;·&nbsp; '
+                f'<span style="color:#ff6600">{fmt_cost_long(orig_span.cost_usd)}</span> &nbsp;·&nbsp; '
                 f'{fmt_duration(orig_span.duration_ms)}'
                 f'</div></div>',
                 unsafe_allow_html=True,
@@ -733,14 +745,14 @@ elif page == "🔁 Replay":
         with col_rep:
             if rep_span:
                 is_err = rep_span.status == SpanStatus.ERROR
-                border = "#3f1515" if is_err else "#1e2535"
+                border = "#fecaca" if is_err else "#e2e8f0"
                 st.markdown(
-                    f'<div style="background:#161b27;border:1px solid {border};border-radius:8px;padding:0.75rem 1rem">'
-                    f'<div style="font-size:0.68rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Replayed</div>'
-                    f'<div style="font-size:0.78rem;color:#7dd3fc;margin-bottom:0.3rem">{rep_span.model}</div>'
+                    f'<div style="background:#ffffff;border:1px solid {border};border-radius:8px;padding:0.75rem 1rem">'
+                    f'<div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Replayed</div>'
+                    f'<div style="font-size:0.78rem;color:#001f5b;margin-bottom:0.3rem">{rep_span.model}</div>'
                     f'<div style="font-size:0.75rem;color:#64748b">'
                     f'{fmt_tokens(rep_span.total_tokens)} tokens &nbsp;·&nbsp; '
-                    f'<span style="color:#a78bfa">{fmt_cost_long(rep_span.cost_usd)}</span> &nbsp;·&nbsp; '
+                    f'<span style="color:#ff6600">{fmt_cost_long(rep_span.cost_usd)}</span> &nbsp;·&nbsp; '
                     f'{fmt_duration(rep_span.duration_ms)}'
                     f'</div></div>',
                     unsafe_allow_html=True,
@@ -758,7 +770,7 @@ elif page == "🔁 Replay":
                     )
             else:
                 st.markdown(
-                    '<div style="color:#475569;font-size:0.8rem;padding:1rem">No replay data.</div>',
+                    '<div style="color:#94a3b8;font-size:0.8rem;padding:1rem">No replay data.</div>',
                     unsafe_allow_html=True,
                 )
 

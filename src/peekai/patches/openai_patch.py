@@ -18,14 +18,13 @@ if TYPE_CHECKING:
 _patched = False
 
 
-def patch(tracer: "Tracer") -> None:
+def patch(tracer: Tracer) -> None:
     global _patched
     if _patched:
         return
 
     try:
-        import openai
-        from openai.resources.chat.completions import Completions, AsyncCompletions
+        from openai.resources.chat.completions import AsyncCompletions, Completions
     except ImportError:
         return  # openai not installed — skip silently
 
@@ -40,7 +39,7 @@ def unpatch() -> None:
     if not _patched:
         return
     try:
-        from openai.resources.chat.completions import Completions, AsyncCompletions
+        from openai.resources.chat.completions import AsyncCompletions, Completions
         if hasattr(Completions, "_peekai_original_create"):
             Completions.create = Completions._peekai_original_create  # type: ignore[attr-defined]
             del Completions._peekai_original_create  # type: ignore[attr-defined]
@@ -56,7 +55,7 @@ def unpatch() -> None:
 # Sync patch
 # ------------------------------------------------------------------
 
-def _patch_sync(Completions: Any, tracer: "Tracer") -> None:
+def _patch_sync(Completions: Any, tracer: Tracer) -> None:
     original = Completions.create
     Completions._peekai_original_create = original  # type: ignore[attr-defined]
 
@@ -88,7 +87,7 @@ def _patch_sync(Completions: Any, tracer: "Tracer") -> None:
 # Async patch
 # ------------------------------------------------------------------
 
-def _patch_async(AsyncCompletions: Any, tracer: "Tracer") -> None:
+def _patch_async(AsyncCompletions: Any, tracer: Tracer) -> None:
     original = AsyncCompletions.create
     AsyncCompletions._peekai_original_create = original  # type: ignore[attr-defined]
 

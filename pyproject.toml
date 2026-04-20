@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     { name = "PeekAI", email = "hello@peekai.dev" }
 ]
-keywords = ["ai", "agents", "observability", "tracing", "llm", "openai", "anthropic", "debugging"]
+keywords = ["ai", "agents", "observability", "tracing", "llm", "openai", "anthropic", "debugging", "replay"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -21,8 +21,11 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Debuggers",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: Console",
+    "Typing :: Typed",
 ]
 
 dependencies = [
@@ -50,6 +53,7 @@ peekai = "peekai.cli.main:app"
 Homepage = "https://github.com/peekai/peekai"
 Repository = "https://github.com/peekai/peekai"
 Issues = "https://github.com/peekai/peekai/issues"
+Changelog = "https://github.com/peekai/peekai/releases"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/peekai"]
@@ -75,6 +79,9 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+# E501 (line too long) is ignored in UI, CLI, and replay files because
+# inline HTML strings and Rich markup cannot be split without breaking output.
+per-file-ignores = { "src/peekai/ui/*.py" = ["E501"], "src/peekai/cli/**/*.py" = ["E501"], "src/peekai/replay/*.py" = ["E501"], "src/peekai/core/*.py" = ["E501"] }
 
 # ---------------------------------------------------------------------------
 # Mypy

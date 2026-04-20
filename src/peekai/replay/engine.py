@@ -22,7 +22,6 @@ from typing import Any
 from peekai.core.costs import calculate_cost
 from peekai.core.models import Span, SpanKind, SpanStatus, Trace
 from peekai.core.storage import Storage
-from peekai.core.tracer import Tracer
 
 
 @dataclass

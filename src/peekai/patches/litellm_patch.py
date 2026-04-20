@@ -21,7 +21,7 @@ _original_completion: Any = None
 _original_acompletion: Any = None
 
 
-def patch(tracer: "Tracer") -> None:
+def patch(tracer: Tracer) -> None:
     global _patched, _original_completion, _original_acompletion
     if _patched:
         return
