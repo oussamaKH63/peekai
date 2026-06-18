@@ -11,7 +11,9 @@ Pages:
 from __future__ import annotations
 
 import json
+from html import escape as esc
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 
@@ -24,8 +26,6 @@ from peekai.core.models import (
 from peekai.core.storage import Storage
 from peekai.ui.styles import (
     GLOBAL_CSS,
-    LOGO_URI,
-    LOGO_FULL_URI,
     ICON_URI,
     kpi_card,
     pill,
@@ -64,13 +64,18 @@ def load_trace(trace_id: str) -> Trace | None:
 
 
 @st.cache_data(ttl=10)
-def load_stats() -> dict:
+def load_stats() -> dict[str, Any]:
     return storage.get_stats()
 
 
 @st.cache_data(ttl=10)
-def load_model_stats() -> list[dict]:
+def load_model_stats() -> list[dict[str, Any]]:
     return storage.get_model_stats()
+
+
+@st.cache_data(ttl=10)
+def load_trace_ids_by_model(model: str) -> set[str]:
+    return storage.get_trace_ids_by_model(model)
 
 
 # ── Formatters ────────────────────────────────────────────────────────────────
@@ -92,6 +97,56 @@ def fmt_duration(ms: float | None) -> str:
     return f"{ms:.0f}ms" if ms < 1000 else f"{ms / 1000:.2f}s"
 
 
+# ── Agent graph builder ───────────────────────────────────────────────────────
+def _build_agent_graph_dot(spans: list[Span]) -> str:
+    """Generate a Graphviz DOT string for the agent execution graph."""
+    span_map = {s.span_id: s for s in spans}
+
+    _kind_style: dict[str, tuple[str, str]] = {
+        "agent": ('fillcolor="#fef3c7" color="#f59e0b"', "agent"),
+        "llm":   ('fillcolor="#eff6ff" color="#3b82f6"', "llm"),
+        "tool":  ('fillcolor="#f0fdf4" color="#22c55e"', "tool"),
+        "chain": ('fillcolor="#f8fafc" color="#64748b"', "chain"),
+    }
+
+    lines = [
+        "digraph {",
+        '  rankdir=TB;',
+        '  graph [bgcolor="#ffffff" pad="0.5" nodesep="0.6" ranksep="0.8" fontname="monospace"];',
+        '  node [shape=box style="filled,rounded" fontname="monospace" fontsize=10 margin="0.25,0.15" penwidth=1.5];',
+        '  edge [color="#94a3b8" arrowsize="0.8" penwidth=1.2];',
+    ]
+
+    for span in spans:
+        style, kind_label = _kind_style.get(
+            span.kind.value, ('fillcolor="#ffffff" color="#e2e8f0"', span.kind.value)
+        )
+        if span.status == SpanStatus.ERROR:
+            style = 'fillcolor="#fee2e2" color="#ef4444"'
+
+        name = span.name[:36].replace("\\", "\\\\").replace('"', '\\"')
+        stats: list[str] = []
+        if span.duration_ms is not None:
+            stats.append(fmt_duration(span.duration_ms))
+        if span.total_tokens:
+            stats.append(f"{span.total_tokens:,} tok")
+        if span.cost_usd:
+            stats.append(f"${span.cost_usd:.4f}")
+
+        label = f"{name}\\n[{kind_label}]"
+        if stats:
+            label += "\\n" + " · ".join(stats)
+
+        lines.append(f'  "{span.span_id}" [label="{label}" {style}];')
+
+    for span in spans:
+        if span.parent_span_id and span.parent_span_id in span_map:
+            lines.append(f'  "{span.parent_span_id}" -> "{span.span_id}";')
+
+    lines.append("}")
+    return "\n".join(lines)
+
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     # Logo
@@ -110,11 +165,40 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    page = st.radio(
-        "nav",
-        ["📊 Dashboard", "🔍 Traces", "🔎 Trace View", "🔁 Replay"],
-        label_visibility="collapsed",
-    )
+    # ── Sidebar navigation buttons ──────────────────────────────────────
+    page_options = ["📊 Dashboard", "📋 Traces", "👁️ Trace View", "🔁 Replay"]
+    page = st.session_state.get("current_page", "📊 Dashboard")
+    
+    for page_option in page_options:
+        if st.button(
+            page_option,
+            key=f"nav_{page_option}",
+            use_container_width=True,
+        ):
+            st.session_state["current_page"] = page_option
+            st.rerun()
+    
+    # Style navigation buttons
+    st.markdown("""
+        <style>
+        div[data-testid="stSidebar"] button[kind="secondary"] {
+            background-color: transparent !important;
+            border: 1px solid transparent !important;
+            color: #334155 !important;
+            font-weight: 400 !important;
+            border-radius: 6px !important;
+            padding: 0.5rem 0.75rem !important;
+            margin-bottom: 0.25rem !important;
+            transition: all 0.15s ease !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+        }
+        div[data-testid="stSidebar"] button[kind="secondary"]:hover {
+            border-color: #ff6600 !important;
+            background-color: #f1f5f9 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     st.divider()
@@ -247,7 +331,7 @@ if page == "📊 Dashboard":
         )
         col_info.markdown(
             f"<div style='padding-top:4px'>"
-            f"<span style='font-weight:600;color:#0f172a'>{t.name}</span>"
+            f"<span style='font-weight:600;color:#0f172a'>{esc(t.name)}</span>"
             f"&nbsp;&nbsp;<code>{t.trace_id[:8]}</code>"
             f"<div style='font-size:0.72rem;color:#94a3b8;margin-top:2px'>{started}</div>"
             f"</div>",
@@ -271,6 +355,7 @@ if page == "📊 Dashboard":
         )
         if col_btn.button("View", key=f"dash_view_{t.trace_id}"):
             st.session_state["selected_trace_id"] = t.trace_id
+            st.session_state["current_page"] = "👁️ Trace View"
             st.rerun()
 
         st.markdown("<hr style='margin:0.4rem 0;border-color:#e2e8f0'>", unsafe_allow_html=True)
@@ -279,7 +364,7 @@ if page == "📊 Dashboard":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Traces
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "🔍 Traces":
+elif page == "📋 Traces":
     st.markdown("## Traces")
 
     traces = load_traces()
@@ -292,7 +377,8 @@ elif page == "🔍 Traces":
     f1, f2, f3, f4 = st.columns([2, 2, 2, 1])
     search = f1.text_input("Search", placeholder="Filter by name…", label_visibility="collapsed")
     status_filter = f2.selectbox("Status", ["All statuses", "ok", "error", "pending"], label_visibility="collapsed")
-    all_models = sorted({s.model for t in traces for s in t.spans if s.model})
+    model_stats = load_model_stats()
+    all_models = sorted({m["model"] for m in model_stats if m["model"]})
     model_filter = f3.selectbox("Model", ["All models"] + all_models, label_visibility="collapsed")
 
     filtered = traces
@@ -301,7 +387,8 @@ elif page == "🔍 Traces":
     if status_filter != "All statuses":
         filtered = [t for t in filtered if t.status.value == status_filter]
     if model_filter != "All models":
-        filtered = [t for t in filtered if any(s.model == model_filter for s in t.spans)]
+        trace_ids_with_model = load_trace_ids_by_model(str(model_filter))
+        filtered = [t for t in filtered if t.trace_id in trace_ids_with_model]
 
     st.markdown(
         f"<div style='font-size:0.75rem;color:#475569;margin-bottom:0.75rem'>{len(filtered)} trace(s)</div>",
@@ -327,7 +414,7 @@ elif page == "🔍 Traces":
 
         c1.markdown(
             f"<div style='padding-top:4px'>"
-            f"<span style='font-weight:600;color:#0f172a;font-size:0.88rem'>{t.name}</span>"
+            f"<span style='font-weight:600;color:#0f172a;font-size:0.88rem'>{esc(t.name)}</span>"
             f"&nbsp;<code>{t.trace_id[:8]}</code>"
             f"</div>",
             unsafe_allow_html=True,
@@ -337,7 +424,7 @@ elif page == "🔍 Traces":
             unsafe_allow_html=True,
         )
         c3.markdown(
-            f"<div style='padding-top:6px;font-size:0.82rem;color:#94a3b8'>{len(t.spans) if t.spans else '—'}</div>",
+            f"<div style='padding-top:6px;font-size:0.82rem;color:#94a3b8'>{t.span_count or '—'}</div>",
             unsafe_allow_html=True,
         )
         c4.markdown(
@@ -354,6 +441,7 @@ elif page == "🔍 Traces":
         )
         if c7.button("→", key=f"list_view_{t.trace_id}"):
             st.session_state["selected_trace_id"] = t.trace_id
+            st.session_state["current_page"] = "👁️ Trace View"
             st.rerun()
 
         st.markdown("<hr style='margin:0.25rem 0;border-color:#e2e8f0'>", unsafe_allow_html=True)
@@ -362,7 +450,7 @@ elif page == "🔍 Traces":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Trace View
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "🔎 Trace View":
+elif page == "👁️ Trace View":
     st.markdown("## Trace View")
 
     default_id = st.session_state.get("selected_trace_id", "")
@@ -401,7 +489,7 @@ elif page == "🔎 Trace View":
         f"""
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.25rem;">
             <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.6rem;">
-                <span style="font-size:1.1rem;font-weight:800;color:#0f172a">{trace.name}</span>
+                <span style="font-size:1.1rem;font-weight:800;color:#0f172a">{esc(trace.name)}</span>
                 {pill(trace.status.value)}
             </div>
             <div style="display:flex;gap:2rem;flex-wrap:wrap;">
@@ -453,144 +541,156 @@ elif page == "🔎 Trace View":
             for s in trace.spans:
                 st.text(f"{s.name}: {s.total_tokens} tokens · {fmt_cost_long(s.cost_usd)}")
 
-    # ── Span waterfall ────────────────────────────────────────────
-    st.markdown(section_header("Span waterfall"), unsafe_allow_html=True)
+    # ── Views: Waterfall | Agent Graph ────────────────────────────
+    wtab, gtab = st.tabs(["📊 Span Waterfall", "🕸️ Agent Graph"])
 
-    # Build depth map for proper tree indentation
-    span_map = {s.span_id: s for s in trace.spans}
+    with wtab:
+        st.markdown(section_header("Span waterfall"), unsafe_allow_html=True)
 
-    def get_depth(span: Span) -> int:
-        depth = 0
-        current = span
-        while current.parent_span_id and current.parent_span_id in span_map:
-            depth += 1
-            current = span_map[current.parent_span_id]
-        return depth
+        # Build depth map for proper tree indentation
+        span_map = {s.span_id: s for s in trace.spans}
 
-    # Kind icons and colors
-    kind_icons = {
-        "llm": "🤖", "tool": "🔧", "agent": "🧠", "chain": "🔗",
-    }
-    kind_colors = {
-        "agent": "#f59e0b",  # amber for agent spans
-    }
+        def get_depth(span: Span) -> int:
+            depth = 0
+            current = span
+            while current.parent_span_id and current.parent_span_id in span_map:
+                depth += 1
+                current = span_map[current.parent_span_id]
+            return depth
 
-    # Compute total trace duration for bar scaling
-    total_ms = trace.duration_ms or 1.0
-    if total_ms == 0:
-        total_ms = 1.0
+        # Kind icons and colors
+        kind_icons = {
+            "llm": "🤖", "tool": "🔧", "agent": "🧠", "chain": "🔗",
+        }
+        kind_colors = {
+            "agent": "#f59e0b",  # amber for agent spans
+        }
 
-    for span in trace.spans:
-        depth = get_depth(span)
-        indent_px = depth * 28
-        is_error = span.status == SpanStatus.ERROR
-        is_agent = span.kind == SpanKind.AGENT
-        span_ms = span.duration_ms or 0
-        bar_pct = min((span_ms / total_ms) * 100, 100)
-        bar_html = waterfall_bar(bar_pct, span.provider or span.kind.value, span.status.value)
-        status_html = pill(span.status.value)
-        border_color = "#fecaca" if is_error else ("#fed7aa" if is_agent else "#e2e8f0")
-        icon = kind_icons.get(span.kind.value, "•")
-        name_color = kind_colors.get(span.kind.value, "#0f172a")
-        tree_prefix = "└─ " if depth > 0 else ""
+        # Compute total trace duration for bar scaling
+        total_ms = trace.duration_ms or 1.0
+        if total_ms == 0:
+            total_ms = 1.0
 
-        error_html = ""
-        if is_error and span.error:
-            error_html = (
-                f'<div style="margin-top:0.5rem;padding:0.4rem 0.75rem;background:#fee2e2;'
-                f'border-radius:6px;font-size:0.8rem;color:#dc2626">'
-                f'<strong>{span.error_type or "Error"}:</strong> {span.error}</div>'
+        for span in trace.spans:
+            is_error = span.status == SpanStatus.ERROR
+            is_agent = span.kind == SpanKind.AGENT
+            span_ms = span.duration_ms or 0
+            bar_pct = min((span_ms / total_ms) * 100, 100)
+            bar_html = waterfall_bar(bar_pct, span.provider or span.kind.value, span.status.value)
+            status_html = pill(span.status.value)
+            border_color = "#fecaca" if is_error else ("#fed7aa" if is_agent else "#e2e8f0")
+            icon = kind_icons.get(span.kind.value, "•")
+            name_color = kind_colors.get(span.kind.value, "#0f172a")
+
+            error_html = ""
+            if is_error and span.error:
+                error_html = (
+                    f'<div style="margin-top:0.5rem;padding:0.4rem 0.75rem;background:#fee2e2;'
+                    f'border-radius:6px;font-size:0.8rem;color:#dc2626">'
+                    f'<strong>{esc(span.error_type or "Error")}:</strong> {esc(span.error)}</div>'
+                )
+
+            st.markdown(
+                f'<div style="background:#ffffff;border:1px solid {border_color};'
+                f'border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:0.25rem;">'
+                f'<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.35rem;">'
+                f'<span style="font-size:0.9rem">{icon}</span>'
+                f'<span style="color:{name_color};font-size:0.88rem;font-weight:600">{esc(span.name)}</span>'
+                f'<span style="font-size:0.68rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:4px">{span.kind.value}</span>'
+                f'{status_html}'
+                f'<span style="font-size:0.72rem;color:#94a3b8;margin-left:auto">'
+                f'{fmt_duration(span.duration_ms)}'
+                f'&nbsp;·&nbsp;{fmt_tokens(span.total_tokens)} tokens'
+                f'&nbsp;·&nbsp;<span style="color:#ff6600">{fmt_cost_long(span.cost_usd)}</span>'
+                f'</span></div>'
+                f'{bar_html}'
+                f'{error_html}'
+                f'</div>',
+                unsafe_allow_html=True,
             )
 
+            # Agent spans have no I/O — skip the expander entirely
+            if is_agent:
+                st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+                continue
+
+            with st.expander(f"Details — {span.name}", expanded=is_error):
+                tab_in, tab_out, tab_tools, tab_raw = st.tabs(
+                    ["📨 Input", "💬 Output", "🔧 Tool Calls", "📄 Raw"]
+                )
+
+                with tab_in:
+                    if span.input:
+                        for msg in span.input:
+                            role = msg.get("role", "user")
+                            content = msg.get("content", "")
+                            safe_role = role if role in ("user", "assistant", "system") else "user"
+                            with st.chat_message(safe_role):
+                                st.write(str(content))
+                    else:
+                        st.caption("No input recorded.")
+
+                with tab_out:
+                    if span.output:
+                        st.text_area(
+                            "output",
+                            value=span.output,
+                            height=150,
+                            disabled=True,
+                            label_visibility="collapsed",
+                            key=f"out_{span.span_id}",
+                        )
+                    else:
+                        st.caption("No output recorded.")
+
+                with tab_tools:
+                    if span.tool_calls:
+                        for tc in span.tool_calls:
+                            st.write(f"**⚙ {tc.get('function', '?')}**  `{tc.get('id', '')}`")
+                            args = tc.get("arguments", "")
+                            if args:
+                                try:
+                                    parsed = json.loads(args) if isinstance(args, str) else args
+                                    st.json(parsed)
+                                except Exception:
+                                    st.code(str(args), language="text")
+                            st.divider()
+                    else:
+                        st.caption("No tool calls.")
+
+                with tab_raw:
+                    if span.raw_response:
+                        st.json(span.raw_response)
+                    else:
+                        st.caption("No raw response recorded.")
+
+            st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+
+    with gtab:
+        st.markdown(section_header("Agent execution graph"), unsafe_allow_html=True)
+        dot_src = _build_agent_graph_dot(trace.spans)
+        st.graphviz_chart(dot_src, use_container_width=True)
         st.markdown(
-            f'<div style="margin-left:{indent_px}px;background:#ffffff;border:1px solid {border_color};'
-            f'border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:0.25rem;">'
-            f'<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.35rem;">'
-            f'<span style="color:#94a3b8;font-size:0.8rem">{tree_prefix}</span>'
-            f'<span style="font-size:0.9rem">{icon}</span>'
-            f'<span style="color:{name_color};font-size:0.88rem;font-weight:600">{span.name}</span>'
-            f'<span style="font-size:0.68rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:4px">{span.kind.value}</span>'
-            f'{status_html}'
-            f'<span style="font-size:0.72rem;color:#94a3b8;margin-left:auto">'
-            f'{fmt_duration(span.duration_ms)}'
-            f'&nbsp;·&nbsp;{fmt_tokens(span.total_tokens)} tokens'
-            f'&nbsp;·&nbsp;<span style="color:#ff6600">{fmt_cost_long(span.cost_usd)}</span>'
-            f'</span></div>'
-            f'{bar_html}'
-            f'{error_html}'
-            f'</div>',
+            "<div style='display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:0.5rem;"
+            "font-size:0.75rem;color:#64748b;padding:0.5rem 0'>"
+            "<span style='display:flex;align-items:center;gap:0.3rem'>"
+            "<span style='display:inline-block;width:12px;height:12px;border-radius:2px;"
+            "background:#fef3c7;border:1.5px solid #f59e0b'></span>agent</span>"
+            "<span style='display:flex;align-items:center;gap:0.3rem'>"
+            "<span style='display:inline-block;width:12px;height:12px;border-radius:2px;"
+            "background:#eff6ff;border:1.5px solid #3b82f6'></span>llm</span>"
+            "<span style='display:flex;align-items:center;gap:0.3rem'>"
+            "<span style='display:inline-block;width:12px;height:12px;border-radius:2px;"
+            "background:#f0fdf4;border:1.5px solid #22c55e'></span>tool</span>"
+            "<span style='display:flex;align-items:center;gap:0.3rem'>"
+            "<span style='display:inline-block;width:12px;height:12px;border-radius:2px;"
+            "background:#f8fafc;border:1.5px solid #64748b'></span>chain</span>"
+            "<span style='display:flex;align-items:center;gap:0.3rem'>"
+            "<span style='display:inline-block;width:12px;height:12px;border-radius:2px;"
+            "background:#fee2e2;border:1.5px solid #ef4444'></span>error</span>"
+            "</div>",
             unsafe_allow_html=True,
         )
-
-        # Agent spans have no I/O — skip the expander entirely
-        if is_agent:
-            st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
-            continue
-
-        # Use columns to indent the expander to match its card depth.
-        # The card uses margin-left: depth*28px. We approximate that with
-        # a column ratio. depth=0 → no spacer, depth=1 → small spacer, etc.
-        # We use (depth-1) so the expander aligns with the card's left edge,
-        # not one level deeper.
-        effective_depth = max(depth - 1, 0)
-        if effective_depth > 0:
-            ratio = effective_depth * 0.08
-            spacer_cols = st.columns([ratio, 1 - ratio])
-            expander_col = spacer_cols[1]
-        else:
-            expander_col = st
-
-        with expander_col.expander(f"Details — {span.name}", expanded=is_error):
-            tab_in, tab_out, tab_tools, tab_raw = st.tabs(
-                ["📨 Input", "💬 Output", "🔧 Tool Calls", "📄 Raw"]
-            )
-
-            with tab_in:
-                if span.input:
-                    for msg in span.input:
-                        role = msg.get("role", "user")
-                        content = msg.get("content", "")
-                        safe_role = role if role in ("user", "assistant", "system") else "user"
-                        with st.chat_message(safe_role):
-                            st.write(str(content))
-                else:
-                    st.caption("No input recorded.")
-
-            with tab_out:
-                if span.output:
-                    st.text_area(
-                        "output",
-                        value=span.output,
-                        height=150,
-                        disabled=True,
-                        label_visibility="collapsed",
-                        key=f"out_{span.span_id}",
-                    )
-                else:
-                    st.caption("No output recorded.")
-
-            with tab_tools:
-                if span.tool_calls:
-                    for tc in span.tool_calls:
-                        st.write(f"**⚙ {tc.get('function', '?')}**  `{tc.get('id', '')}`")
-                        args = tc.get("arguments", "")
-                        if args:
-                            try:
-                                parsed = json.loads(args) if isinstance(args, str) else args
-                                st.json(parsed)
-                            except Exception:
-                                st.code(str(args), language="text")
-                        st.divider()
-                else:
-                    st.caption("No tool calls.")
-
-            with tab_raw:
-                if span.raw_response:
-                    st.json(span.raw_response)
-                else:
-                    st.caption("No raw response recorded.")
-
-        st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -705,14 +805,14 @@ elif page == "🔁 Replay":
         if orig_span.kind != SpanKind.LLM:
             st.markdown(
                 f'<div style="color:#94a3b8;font-size:0.8rem;margin:0.3rem 0">'
-                f'⊘ <em>{orig_span.name}</em> — skipped (not an LLM span)</div>',
+                f'⊘ <em>{esc(orig_span.name)}</em> — skipped (not an LLM span)</div>',
                 unsafe_allow_html=True,
             )
             continue
 
         st.markdown(
             f'<div style="font-weight:600;color:#0f172a;font-size:0.9rem;margin:0.75rem 0 0.4rem 0">'
-            f'{orig_span.name}</div>',
+            f'{esc(orig_span.name)}</div>',
             unsafe_allow_html=True,
         )
 
@@ -723,7 +823,7 @@ elif page == "🔁 Replay":
             st.markdown(
                 f'<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem 1rem">'
                 f'<div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Original</div>'
-                f'<div style="font-size:0.78rem;color:#001f5b;margin-bottom:0.3rem">{orig_span.model}</div>'
+                f'<div style="font-size:0.78rem;color:#001f5b;margin-bottom:0.3rem">{esc(orig_span.model)}</div>'
                 f'<div style="font-size:0.75rem;color:#64748b">'
                 f'{fmt_tokens(orig_span.total_tokens)} tokens &nbsp;·&nbsp; '
                 f'<span style="color:#ff6600">{fmt_cost_long(orig_span.cost_usd)}</span> &nbsp;·&nbsp; '
@@ -749,7 +849,7 @@ elif page == "🔁 Replay":
                 st.markdown(
                     f'<div style="background:#ffffff;border:1px solid {border};border-radius:8px;padding:0.75rem 1rem">'
                     f'<div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem">Replayed</div>'
-                    f'<div style="font-size:0.78rem;color:#001f5b;margin-bottom:0.3rem">{rep_span.model}</div>'
+                    f'<div style="font-size:0.78rem;color:#001f5b;margin-bottom:0.3rem">{esc(rep_span.model)}</div>'
                     f'<div style="font-size:0.75rem;color:#64748b">'
                     f'{fmt_tokens(rep_span.total_tokens)} tokens &nbsp;·&nbsp; '
                     f'<span style="color:#ff6600">{fmt_cost_long(rep_span.cost_usd)}</span> &nbsp;·&nbsp; '
