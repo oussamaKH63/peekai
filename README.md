@@ -1,26 +1,33 @@
-# 👀 PeekAI
+<div align="center">
+  <img src="peekai-name-logo.png" alt="PeekAI" width="320" />
 
-**Lightweight, local-first observability and debugging for Python AI agents.**
+  <p><strong>Lightweight, local-first observability and debugging for Python AI agents.</strong></p>
 
-No cloud. No API keys. No dashboards to sign up for. Drop it in, call `peekai.init()`, and see exactly what your agent is doing — every LLM call, every tool use, every token spent.
+  <p>No cloud. No API keys. No dashboards to sign up for.<br/>
+  Drop it in, call <code>peekai.init()</code>, and see exactly what your agent is doing —<br/>
+  every LLM call, every tool use, every token spent.</p>
 
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/peekai/peekai)
+  [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+  [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+  [![Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/peekai/peekai)
+  [![uv](https://img.shields.io/badge/packaged%20with-uv-purple)](https://github.com/astral-sh/uv)
+</div>
 
 ---
 
 ## Why PeekAI?
 
-Building AI agents is hard. Debugging them is harder. Most observability tools require you to send your data to their cloud, set up accounts, and configure pipelines before you can see a single trace.
+Building AI agents is hard. Debugging them is harder. Tools like LangSmith or Weights & Biases require you to send your data to their cloud, create accounts, and wire up pipelines before you can see a single trace.
 
 PeekAI is different:
 
-- **Local-first** — all traces stored in SQLite on your machine, nothing leaves your environment
-- **Zero config** — one line to instrument OpenAI, Anthropic, and LiteLLM
-- **Multi-agent aware** — visualize agent-to-agent handoffs as a nested span tree
-- **Trace replay** — re-run any past trace with a different model or modified tool response
-- **CLI + UI** — inspect traces in your terminal or a local Streamlit dashboard
+| | |
+|---|---|
+| 🏠 **Local-first** | All traces stored in SQLite at `~/.peekai/peekai.db` — nothing leaves your machine |
+| ⚡ **Zero config** | One line to instrument OpenAI, Anthropic, and LiteLLM |
+| 🧠 **Multi-agent aware** | Visualize agent-to-agent handoffs as a nested span tree |
+| 🔁 **Trace replay** | Re-run any past trace with a different model or modified tool response |
+| 🖥️ **CLI + UI** | Inspect traces in your terminal or a local Streamlit dashboard |
 
 ---
 
@@ -32,7 +39,10 @@ pip install peekai
 # With OpenAI support
 pip install "peekai[openai]"
 
-# With all SDK support
+# With Anthropic support
+pip install "peekai[anthropic]"
+
+# With everything
 pip install "peekai[all]"
 ```
 
@@ -65,6 +75,8 @@ peekai view <trace-id>       # full span waterfall
 peekai stats                 # token + cost totals
 peekai ui                    # launch the web dashboard
 ```
+
+> **How it works** — `peekai.init()` monkey-patches the SDK clients at startup. No changes to your existing API calls are needed.
 
 ---
 
@@ -165,6 +177,8 @@ The replay is saved as a new trace and shown side by side in the UI with token/c
 | `peekai ui` | Launch Streamlit dashboard |
 | `peekai clear` | Wipe local storage |
 
+All commands accept short trace IDs — the first 8 characters are enough.
+
 ---
 
 ## Web Dashboard
@@ -192,15 +206,30 @@ Opens at `http://localhost:8501` with four pages:
 
 ---
 
+## `peekai.init()` options
+
+```python
+peekai.init(
+    db_path="./my_traces.db",  # default: ~/.peekai/peekai.db
+    openai=True,               # patch OpenAI SDK (default True)
+    anthropic=True,            # patch Anthropic SDK (default True)
+    litellm=True,              # patch LiteLLM (default True)
+)
+```
+
+Traces are stored locally at `~/.peekai/peekai.db` by default. You can open it directly with any SQLite viewer, back it up, or wipe it with `peekai clear`.
+
+---
+
 ## Supported SDKs
 
-| SDK | Status |
-|---|---|
-| OpenAI | ✅ Auto-patched |
-| Anthropic | ✅ Auto-patched |
-| LiteLLM | ✅ Auto-patched |
+| SDK | Status | Notes |
+|---|---|---|
+| OpenAI | ✅ Auto-patched | sync + async, streaming |
+| Anthropic | ✅ Auto-patched | sync + async, `create(stream=True)` |
+| LiteLLM | ✅ Auto-patched | sync + async |
 
-All patching happens at `peekai.init()` — no changes to your existing code.
+> **Note** — the Anthropic `client.messages.stream()` context manager helper is not currently patched. Use `client.messages.create(stream=True)` to get streaming traces.
 
 ---
 
@@ -215,7 +244,7 @@ uv sync --extra all
 # Run tests
 uv run pytest tests/ -v
 
-# Run the demo
+# Run the demos
 uv run python examples/demo_agent.py
 uv run python examples/demo_multi_agent.py
 
@@ -227,7 +256,7 @@ uv run peekai ui
 
 ## Roadmap
 
-| Phase | Status |
+| Feature | Status |
 |---|---|
 | Core SDK — tracing, storage, patches | ✅ Done |
 | CLI — list, view, stats, clear, map | ✅ Done |
@@ -240,10 +269,24 @@ uv run peekai ui
 
 ## Contributing
 
-See `CONTRIBUTING.md` — coming soon.
+```bash
+# Install dev dependencies
+uv sync --extra dev
+
+# Run linter
+uv run ruff check src/
+
+# Run type checker
+uv run mypy src/
+
+# Run tests
+uv run pytest tests/ -v
+```
+
+PRs and issues are welcome. See `CONTRIBUTING.md` for more detail.
 
 ---
 
 ## License
 
-MIT
+MIT © [Oussema Khorchani](https://github.com/peekai)

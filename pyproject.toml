@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [
-    { name = "PeekAI", email = "hello@peekai.dev" }
+    { name = "Oussema Khorchani", email = "oussama.khorchany@gmail.com" }
 ]
 keywords = ["ai", "agents", "observability", "tracing", "llm", "openai", "anthropic", "debugging", "replay"]
 classifiers = [
