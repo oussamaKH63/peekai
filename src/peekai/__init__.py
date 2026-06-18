@@ -17,7 +17,7 @@ from peekai.core.models import Span, SpanKind, SpanStatus, Trace
 from peekai.core.storage import Storage
 from peekai.core.tracer import Tracer
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = [
     "init",
     "trace",

@@ -7,7 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.1.0] — Unreleased
+## [0.1.1] — 2026-06-19
+
+### Fixed
+- README logo now renders correctly on PyPI
+- Corrected GitHub repository URLs throughout (pyproject.toml, README, CONTRIBUTING, CHANGELOG)
+
+---
+
+## [0.1.0] — 2026-06-19
 
 First public release.
 
@@ -51,4 +59,5 @@ First public release.
 
 ---
 
+[0.1.1]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.1
 [0.1.0]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.0
