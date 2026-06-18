@@ -2,8 +2,8 @@
 LiteLLM monkey-patch.
 
 Wraps `litellm.completion` and `litellm.acompletion` (the top-level functions).
-LiteLLM uses an OpenAI-compatible response format, so we reuse the same
-response parser as the OpenAI patch.
+LiteLLM uses an OpenAI-compatible response format, so we reuse the same response
+parser and streaming accumulator as the OpenAI patch.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 from peekai.core.costs import calculate_cost
 from peekai.core.models import SpanKind, SpanStatus
+from peekai.patches._stream import OpenAIAccumulator, wrap_async, wrap_sync
+from peekai.patches.registry import get_tracer, set_tracer
 
 if TYPE_CHECKING:
     from peekai.core.tracer import Tracer
@@ -22,6 +24,8 @@ _original_acompletion: Any = None
 
 
 def patch(tracer: Tracer) -> None:
+    set_tracer(tracer)  # always register the latest tracer (re-init safe)
+
     global _patched, _original_completion, _original_acompletion
     if _patched:
         return
@@ -35,6 +39,10 @@ def patch(tracer: Tracer) -> None:
     _original_acompletion = litellm.acompletion
 
     def patched_completion(*args: Any, **kwargs: Any) -> Any:
+        tracer = get_tracer()
+        if tracer is None:
+            return _original_completion(*args, **kwargs)
+
         model: str = kwargs.get("model", args[0] if args else "")
         messages: list[dict[str, Any]] = kwargs.get("messages", [])
 
@@ -48,14 +56,23 @@ def patch(tracer: Tracer) -> None:
 
         try:
             response = _original_completion(*args, **kwargs)
-            _populate_span(span, response, model)
-            tracer.finish_span(span, SpanStatus.OK)
-            return response
         except Exception as exc:
             tracer.finish_span_with_error(span, exc)
             raise
 
+        if kwargs.get("stream"):
+            tracer.finish_span(span, SpanStatus.OK)
+            return wrap_sync(response, span, OpenAIAccumulator(), model, tracer)
+
+        _populate_span(span, response, model)
+        tracer.finish_span(span, SpanStatus.OK)
+        return response
+
     async def patched_acompletion(*args: Any, **kwargs: Any) -> Any:
+        tracer = get_tracer()
+        if tracer is None:
+            return await _original_acompletion(*args, **kwargs)
+
         model: str = kwargs.get("model", args[0] if args else "")
         messages: list[dict[str, Any]] = kwargs.get("messages", [])
 
@@ -69,12 +86,17 @@ def patch(tracer: Tracer) -> None:
 
         try:
             response = await _original_acompletion(*args, **kwargs)
-            _populate_span(span, response, model)
-            tracer.finish_span(span, SpanStatus.OK)
-            return response
         except Exception as exc:
             tracer.finish_span_with_error(span, exc)
             raise
+
+        if kwargs.get("stream"):
+            tracer.finish_span(span, SpanStatus.OK)
+            return wrap_async(response, span, OpenAIAccumulator(), model, tracer)
+
+        _populate_span(span, response, model)
+        tracer.finish_span(span, SpanStatus.OK)
+        return response
 
     litellm.completion = patched_completion
     litellm.acompletion = patched_acompletion

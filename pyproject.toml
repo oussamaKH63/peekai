@@ -32,6 +32,7 @@ dependencies = [
     "typer>=0.12.0",
     "rich>=13.0.0",
     "streamlit>=1.35.0",
+    "pandas>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -90,6 +91,12 @@ per-file-ignores = { "src/peekai/ui/*.py" = ["E501"], "src/peekai/cli/**/*.py" =
 python_version = "3.10"
 strict = true
 files = ["src/peekai"]
+
+# pandas ships without type stubs in this project's environment; the UI only
+# uses it for display tables, so silence the missing-stub error.
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*"]
+ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
 # Pytest

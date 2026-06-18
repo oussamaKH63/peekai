@@ -127,6 +127,29 @@ class ReplayEngine:
                 return self.storage.get_trace(t.trace_id)
         return None
 
+    def _apply_tool_overrides(
+        self, messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Rewrite tool/function result messages whose name matches an override.
+
+        Best-effort: matches messages with role ``tool``/``function`` and a
+        ``name`` equal to an override key, replacing their ``content`` with the
+        supplied value. Messages without a ``name`` cannot be matched.
+        """
+        if not self.tool_overrides:
+            return messages
+
+        patched: list[dict[str, Any]] = []
+        for msg in messages:
+            name = msg.get("name")
+            if msg.get("role") in ("tool", "function") and name in self.tool_overrides:
+                new_msg = dict(msg)
+                new_msg["content"] = self.tool_overrides[name]
+                patched.append(new_msg)
+            else:
+                patched.append(msg)
+        return patched
+
     def _replay_llm_span(self, orig: Span, new_trace_id: str) -> Span:
         """Re-send the original span's messages to the LLM and record a new span."""
         model = self.model_override or orig.model
@@ -138,7 +161,7 @@ class ReplayEngine:
             kind=SpanKind.LLM,
             model=model,
             provider=provider,
-            input=orig.input,
+            input=self._apply_tool_overrides(orig.input),
             parent_span_id=orig.parent_span_id,
             metadata={"original_span_id": orig.span_id},
         )
@@ -182,10 +205,11 @@ class ReplayEngine:
         choice = response.choices[0] if response.choices else None
         if choice:
             span.output = choice.message.content or ""
-            if choice.message.tool_calls:
+            tool_calls: Any = choice.message.tool_calls
+            if tool_calls:
                 span.tool_calls = [
                     {"id": tc.id, "function": tc.function.name, "arguments": tc.function.arguments}
-                    for tc in choice.message.tool_calls
+                    for tc in tool_calls
                 ]
         span.raw_response = {
             "id": response.id,

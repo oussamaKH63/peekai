@@ -151,13 +151,6 @@ code {
     border-bottom: 1px solid #e2e8f0;
 }
 
-/* ── Sidebar nav ──────────────────────────────────────────────────── */
-[data-testid="stRadio"] label {
-    font-size: 0.85rem !important;
-    padding: 0.3rem 0 !important;
-}
-[data-testid="stRadio"] > div { gap: 0.1rem !important; }
-
 /* ── Tabs ─────────────────────────────────────────────────────────── */
 [data-testid="stTabs"] button {
     font-size: 0.8rem !important;
@@ -247,10 +240,10 @@ def pill(status: str) -> str:
 
 
 def kpi_card(label: str, value: str, sub: str = "") -> str:
-    sub_html = f'<div style="font-size:0.72rem;color:#94a3b8;margin-top:0.3rem">{sub}</div>' if sub else ""
+    sub_html = f'<div style="font-size:0.72rem;color:#94a3b8;margin-top:0.3rem">{sub}</div>' if sub else '<div style="margin-top:0.3rem;min-height:1.2rem"></div>'
     return (
         f'<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;'
-        f'padding:1.25rem 1.5rem;text-align:center">'
+        f'padding:1.25rem 1.5rem;text-align:center;min-height:90px;display:flex;flex-direction:column;justify-content:center">'
         f'<div style="font-size:0.7rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:0.4rem">{label}</div>'
         f'<div style="font-size:1.8rem;font-weight:800;color:#0f172a;line-height:1">{value}</div>'
         f'{sub_html}'

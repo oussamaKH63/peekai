@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from peekai.core.models import Span, SpanKind, SpanStatus, Trace
+from peekai.core.models import Span, SpanKind, Trace
 from peekai.core.storage import Storage
 
 
@@ -106,6 +106,25 @@ def test_get_trace_includes_spans(storage):
 # Stats
 # ------------------------------------------------------------------
 
+def test_indexes_are_created(storage):
+    rows = storage._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'index'"
+    ).fetchall()
+    names = {r["name"] for r in rows}
+    assert "idx_spans_trace_id" in names
+    assert "idx_spans_model" in names
+
+
+def test_list_traces_populates_span_count(storage):
+    t = _make_trace()
+    storage.save_trace(t)
+    storage.save_span(_make_span(t.trace_id))
+    storage.save_span(_make_span(t.trace_id, model="gpt-4o-mini"))
+
+    listed = storage.list_traces()
+    assert listed[0].span_count == 2
+
+
 def test_stats_aggregation(storage):
     for _ in range(3):
         t = _make_trace()
@@ -128,10 +147,32 @@ def test_span_json_fields_round_trip(storage):
     storage.save_trace(t)
 
     span = _make_span(t.trace_id)
-    span.tool_calls = [{"id": "tc_1", "function": "search", "arguments": '{"q":"test"}'}]
+    span.tool_calls = [
+        {"id": "tc_1", "function": "search", "arguments": '{"q":"test"}'}
+    ]
     span.metadata = {"custom_key": "custom_value"}
     storage.save_span(span)
 
     fetched = storage.get_spans(t.trace_id)[0]
     assert fetched.tool_calls[0]["function"] == "search"
     assert fetched.metadata["custom_key"] == "custom_value"
+
+
+def test_save_span_with_non_serializable_input_does_not_raise(storage):
+    """Exotic message content (datetimes, objects) must not break persistence."""
+    from datetime import datetime, timezone
+
+    t = _make_trace()
+    storage.save_trace(t)
+
+    span = _make_span(t.trace_id)
+    span.input = [
+        {"role": "user", "content": "hi", "ts": datetime.now(timezone.utc)},
+    ]
+    span.metadata = {"obj": object()}
+    storage.save_span(span)  # json.dumps(default=str) — must not raise
+
+    fetched = storage.get_spans(t.trace_id)[0]
+    assert fetched.input[0]["role"] == "user"
+    # The non-serializable value was coerced to a string rather than crashing.
+    assert isinstance(fetched.input[0]["ts"], str)

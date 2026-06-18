@@ -17,13 +17,32 @@ import peekai
 from openai import OpenAI
 
 # ── Config ────────────────────────────────────────────────────────────────────
-API_KEY  = os.getenv("PEEKAI_DEMO_KEY", "sk-MtQLEYr9nuJJwUOvgxYE6VGrs0LkqXOzCLZGuXGX43122Ty9")
-BASE_URL = os.getenv("PEEKAI_DEMO_URL", "https://api.chatanywhere.tech/v1")
-MODEL    = "gpt-3.5-turbo"
+API_KEY = os.getenv("OPENAI_API_KEY")
+BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+MODEL = "gpt-4o-mini"
 
-# Set env vars so the replay engine picks them up automatically
-os.environ.setdefault("OPENAI_API_KEY", API_KEY)
-os.environ.setdefault("OPENAI_BASE_URL", BASE_URL)
+if not API_KEY:
+    from rich.console import Console
+    console = Console()
+    console.print()
+    console.print("[bold yellow]⚠️  PeekAI Demo Setup[/bold yellow]")
+    console.print("[dim]This demo requires an OpenAI API key.[/dim]")
+    console.print()
+    console.print("[bold]Quick setup:[/bold]")
+    console.print("[dim]Windows PowerShell:[/dim]")
+    console.print('  [green]$env:OPENAI_API_KEY="sk-your-key-here"[/green]')
+    console.print("[dim]Linux/Mac:[/dim]")
+    console.print('  [green]export OPENAI_API_KEY="sk-your-key-here"[/green]')
+    console.print()
+    console.print("[dim]Or create a .env file with: OPENAI_API_KEY=sk-...[/dim]")
+    console.print()
+    console.print("[dim]Get your API key at: https://platform.openai.com/api-keys[/dim]")
+    console.print()
+    exit(1)
+
+# Automatically set env vars so replay engine and other tools can access them
+os.environ["OPENAI_API_KEY"] = API_KEY
+os.environ["OPENAI_BASE_URL"] = BASE_URL
 
 # ── Init PeekAI ───────────────────────────────────────────────────────────────
 peekai.init()

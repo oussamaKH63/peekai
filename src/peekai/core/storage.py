@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,10 @@ class Storage:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        # The connection is shared (check_same_thread=False) across the tracer,
+        # CLI, and Streamlit's cached Storage. A single sqlite3 connection is not
+        # safe for concurrent use, so serialise all access through this lock.
+        self._lock = threading.RLock()
         self._migrate()
 
     # ------------------------------------------------------------------
@@ -97,9 +102,18 @@ class Storage:
     # ------------------------------------------------------------------
 
     def _migrate(self) -> None:
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(_CREATE_TRACES)
             self._conn.execute(_CREATE_SPANS)
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON spans(trace_id)"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_spans_model ON spans(model)"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_traces_started_at ON traces(started_at)"
+            )
 
     # ------------------------------------------------------------------
     # Traces
@@ -107,7 +121,7 @@ class Storage:
 
     def save_trace(self, trace: Trace) -> None:
         """Insert or replace a trace record."""
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """
                 INSERT OR REPLACE INTO traces
@@ -126,31 +140,47 @@ class Storage:
                     trace.total_output_tokens,
                     trace.total_tokens,
                     trace.total_cost_usd,
-                    json.dumps(trace.metadata),
+                    json.dumps(trace.metadata, default=str),
                 ),
             )
 
     def get_trace(self, trace_id: str) -> Trace | None:
         """Fetch a single trace with all its spans."""
-        row = self._conn.execute(
-            "SELECT * FROM traces WHERE trace_id = ?", (trace_id,)
-        ).fetchone()
-        if row is None:
-            return None
-        trace = self._row_to_trace(row)
-        trace.spans = self.get_spans(trace_id)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM traces WHERE trace_id = ?", (trace_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            trace = self._row_to_trace(row)
+            trace.spans = self.get_spans(trace_id)
+        trace.span_count = len(trace.spans)
         return trace
 
     def list_traces(self, limit: int = 10) -> list[Trace]:
-        """Return the most recent traces (without spans for performance)."""
-        rows = self._conn.execute(
-            "SELECT * FROM traces ORDER BY started_at DESC LIMIT ?", (limit,)
-        ).fetchall()
-        return [self._row_to_trace(r) for r in rows]
+        """Return the most recent traces (with span counts but not spans)."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT t.*,
+                    (SELECT COUNT(*) FROM spans s WHERE s.trace_id = t.trace_id)
+                        AS span_count
+                FROM traces t
+                ORDER BY t.started_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        traces = []
+        for r in rows:
+            trace = self._row_to_trace(r)
+            trace.span_count = r["span_count"] or 0
+            traces.append(trace)
+        return traces
 
     def delete_all(self) -> None:
         """Wipe all traces and spans — used by `peekai clear`."""
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute("DELETE FROM spans")
             self._conn.execute("DELETE FROM traces")
 
@@ -160,7 +190,7 @@ class Storage:
 
     def save_span(self, span: Span) -> None:
         """Insert or replace a span record."""
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """
                 INSERT OR REPLACE INTO spans
@@ -181,26 +211,27 @@ class Storage:
                     _dt_to_str(span.started_at),
                     _dt_to_str(span.ended_at),
                     span.status.value,
-                    json.dumps(span.input),
+                    json.dumps(span.input, default=str),
                     span.output,
-                    json.dumps(span.raw_response),
+                    json.dumps(span.raw_response, default=str),
                     span.input_tokens,
                     span.output_tokens,
                     span.total_tokens,
                     span.cost_usd,
-                    json.dumps(span.tool_calls),
+                    json.dumps(span.tool_calls, default=str),
                     span.error,
                     span.error_type,
-                    json.dumps(span.metadata),
+                    json.dumps(span.metadata, default=str),
                 ),
             )
 
     def get_spans(self, trace_id: str) -> list[Span]:
         """Return all spans for a trace, ordered by start time."""
-        rows = self._conn.execute(
-            "SELECT * FROM spans WHERE trace_id = ? ORDER BY started_at ASC",
-            (trace_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM spans WHERE trace_id = ? ORDER BY started_at ASC",
+                (trace_id,),
+            ).fetchall()
         return [self._row_to_span(r) for r in rows]
 
     # ------------------------------------------------------------------
@@ -209,16 +240,17 @@ class Storage:
 
     def get_stats(self) -> dict[str, Any]:
         """Aggregate stats across all traces."""
-        row = self._conn.execute(
-            """
-            SELECT
-                COUNT(*)            AS total_runs,
-                SUM(total_tokens)   AS total_tokens,
-                SUM(total_cost_usd) AS total_cost_usd
-            FROM traces
-            WHERE status != 'pending'
-            """
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT
+                    COUNT(*)            AS total_runs,
+                    SUM(total_tokens)   AS total_tokens,
+                    SUM(total_cost_usd) AS total_cost_usd
+                FROM traces
+                WHERE status != 'pending'
+                """
+            ).fetchone()
         return {
             "total_runs": row["total_runs"] or 0,
             "total_tokens": row["total_tokens"] or 0,
@@ -227,20 +259,21 @@ class Storage:
 
     def get_model_stats(self) -> list[dict[str, Any]]:
         """Aggregate token + cost stats grouped by model, queried directly from spans."""
-        rows = self._conn.execute(
-            """
-            SELECT
-                model,
-                provider,
-                COUNT(*)            AS calls,
-                SUM(total_tokens)   AS tokens,
-                SUM(cost_usd)       AS cost_usd
-            FROM spans
-            WHERE model != ''
-            GROUP BY model, provider
-            ORDER BY cost_usd DESC
-            """
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    model,
+                    provider,
+                    COUNT(*)            AS calls,
+                    SUM(total_tokens)   AS tokens,
+                    SUM(cost_usd)       AS cost_usd
+                FROM spans
+                WHERE model != ''
+                GROUP BY model, provider
+                ORDER BY cost_usd DESC
+                """
+            ).fetchall()
         return [
             {
                 "model": r["model"],
@@ -251,6 +284,14 @@ class Storage:
             }
             for r in rows
         ]
+
+    def get_trace_ids_by_model(self, model: str) -> set[str]:
+        """Get all trace IDs that contain spans using the specified model."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT DISTINCT trace_id FROM spans WHERE model = ?", (model,)
+            ).fetchall()
+        return {r["trace_id"] for r in rows}
 
     # ------------------------------------------------------------------
     # Helpers
@@ -297,7 +338,8 @@ class Storage:
         )
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     def __enter__(self) -> Storage:
         return self

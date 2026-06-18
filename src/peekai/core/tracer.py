@@ -6,7 +6,9 @@ Uses contextvars so it is safe in async / multi-threaded code.
 
 from __future__ import annotations
 
+import asyncio
 import functools
+import logging
 from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
@@ -15,9 +17,17 @@ from typing import Any
 from peekai.core.models import Span, SpanKind, SpanStatus, Trace
 from peekai.core.storage import Storage
 
+logger = logging.getLogger("peekai")
+
 # Context variables — one active trace and one active span per async context
 _active_trace: ContextVar[Trace | None] = ContextVar("_active_trace", default=None)
 _active_span: ContextVar[Span | None] = ContextVar("_active_span", default=None)
+
+# Name + metadata flag for traces created implicitly when a span starts with no
+# explicit @trace active, so auto-instrumented calls are still captured instead
+# of producing orphan spans.
+_AUTO_TRACE_NAME = "auto"
+_AUTO_TRACE_FLAG = "peekai_auto"
 
 
 class Tracer:
@@ -36,7 +46,7 @@ class Tracer:
         """Create and register a new Trace as the active trace."""
         trace = Trace(name=name, metadata=metadata or {})
         _active_trace.set(trace)
-        self.storage.save_trace(trace)
+        self._save_trace_safe(trace)
         return trace
 
     def finish_trace(self, trace: Trace | None = None) -> Trace | None:
@@ -45,7 +55,7 @@ class Tracer:
         if t is None:
             return None
         t.finish()
-        self.storage.save_trace(t)
+        self._save_trace_safe(t)
         _active_trace.set(None)
         return t
 
@@ -63,6 +73,13 @@ class Tracer:
     ) -> Span:
         """Create a new Span and attach it to the active Trace."""
         trace = _active_trace.get()
+        if trace is None:
+            # No explicit @trace is active (e.g. peekai.init() was called but
+            # this call site isn't wrapped in @trace). Create an implicit "auto"
+            # trace so the call is still captured instead of producing an orphan
+            # span that would violate the spans→traces foreign key.
+            trace = self.start_trace(_AUTO_TRACE_NAME, metadata={_AUTO_TRACE_FLAG: True})
+
         parent = _active_span.get()
 
         span = Span(
@@ -74,23 +91,67 @@ class Tracer:
             metadata=metadata or {},
         )
 
-        if trace is not None:
-            trace.add_span(span)
+        trace.add_span(span)
 
-        _active_span.set(span)
+        # Remember the previously active span via the reset token so finish_span
+        # can restore it. This keeps the parent/child tree correct for sibling
+        # spans and for sequential calls within the same parent.
+        span._token = _active_span.set(span)
         return span
 
     def finish_span(self, span: Span, status: SpanStatus = SpanStatus.OK) -> None:
-        """Finish a span and persist it."""
+        """Finish a span, persist it, and restore the parent as active span."""
         span.finish(status)
-        self.storage.save_span(span)
-        _active_span.set(None)
+        self._save_span_safe(span)
+        self._restore_parent(span)
+        self._rollup_auto_trace()
 
     def finish_span_with_error(self, span: Span, exc: Exception) -> None:
-        """Finish a span in error state and persist it."""
+        """Finish a span in error state, persist it, and restore the parent."""
         span.finish_with_error(exc)
-        self.storage.save_span(span)
-        _active_span.set(None)
+        self._save_span_safe(span)
+        self._restore_parent(span)
+        self._rollup_auto_trace()
+
+    def _restore_parent(self, span: Span) -> None:
+        """Restore the span that was active before ``span`` started.
+
+        Resetting via the contextvar token (captured in ``start_span``) restores
+        the *parent* span rather than clearing the context, so sibling spans and
+        sequential calls within the same parent are tracked correctly.
+        """
+        token = span._token
+        if token is not None:
+            span._token = None
+            _active_span.reset(token)
+
+    def _rollup_auto_trace(self) -> None:
+        """Keep an implicit "auto" trace's totals current as its spans finish.
+
+        Explicit @trace runs are rolled up by finish_trace, so only auto-created
+        traces are refreshed here — this gives `peekai list`/`stats`/UI correct
+        totals even though an auto trace has no explicit end.
+        """
+        trace = _active_trace.get()
+        if trace is not None and trace.metadata.get(_AUTO_TRACE_FLAG):
+            trace.finish()
+            self._save_trace_safe(trace)
+
+    # ------------------------------------------------------------------
+    # Guarded persistence — instrumentation must never break user code
+    # ------------------------------------------------------------------
+
+    def _save_span_safe(self, span: Span) -> None:
+        try:
+            self.storage.save_span(span)
+        except Exception:
+            logger.warning("peekai: failed to persist span %s", span.span_id, exc_info=True)
+
+    def _save_trace_safe(self, trace: Trace) -> None:
+        try:
+            self.storage.save_trace(trace)
+        except Exception:
+            logger.warning("peekai: failed to persist trace %s", trace.trace_id, exc_info=True)
 
     # ------------------------------------------------------------------
     # Context accessors
@@ -117,8 +178,6 @@ class Tracer:
             def run():
                 ...
         """
-        import asyncio
-
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             trace_name = name or fn.__name__
 
@@ -172,45 +231,35 @@ class Tracer:
             async def writer_agent(draft: str) -> str:
                 ...
         """
-        import asyncio
-
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             agent_name = name or fn.__name__
 
             if asyncio.iscoroutinefunction(fn):
                 @functools.wraps(fn)
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                    # Create an AGENT span — becomes parent for all spans inside
+                    # AGENT span — becomes the parent for every span created
+                    # inside fn. finish_span restores the caller's span via the
+                    # contextvar reset token, so siblings stay siblings.
                     agent_span = self.start_span(agent_name, kind=SpanKind.AGENT)
-                    # Save the caller's span so we can restore it after
-                    previous_span = _active_span.get()
-                    _active_span.set(agent_span)
                     try:
                         result = await fn(*args, **kwargs)
                         self.finish_span(agent_span)
                         return result
                     except Exception as exc:
                         self.finish_span_with_error(agent_span, exc)
-                        raise exc
-                    finally:
-                        # Restore caller's span context
-                        _active_span.set(previous_span)
+                        raise
                 return async_wrapper
             else:
                 @functools.wraps(fn)
                 def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                     agent_span = self.start_span(agent_name, kind=SpanKind.AGENT)
-                    previous_span = _active_span.get()
-                    _active_span.set(agent_span)
                     try:
                         result = fn(*args, **kwargs)
                         self.finish_span(agent_span)
                         return result
                     except Exception as exc:
                         self.finish_span_with_error(agent_span, exc)
-                        raise exc
-                    finally:
-                        _active_span.set(previous_span)
+                        raise
                 return sync_wrapper
 
         return decorator
@@ -228,8 +277,6 @@ class Tracer:
             def search(query: str) -> str:
                 ...
         """
-        import asyncio
-
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             span_name = name or fn.__name__
 

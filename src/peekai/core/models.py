@@ -9,6 +9,7 @@ Hierarchy:
 from __future__ import annotations
 
 import uuid
+from contextvars import Token
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -78,6 +79,13 @@ class Span:
     # Arbitrary metadata attached by the user
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    # Internal: contextvar reset token, set by the Tracer when this span
+    # becomes the active span. Used on finish to restore the parent span as
+    # the active span rather than clearing the context. Not persisted.
+    _token: Token[Span | None] | None = field(
+        default=None, init=False, compare=False, repr=False
+    )
+
     def finish(self, status: SpanStatus = SpanStatus.OK) -> None:
         """Mark the span as complete."""
         self.ended_at = datetime.now(timezone.utc)
@@ -114,6 +122,11 @@ class Trace:
 
     # Spans collected during this run
     spans: list[Span] = field(default_factory=list)
+
+    # Number of spans for this trace. Populated by list_traces (which omits the
+    # spans themselves for performance) so summaries can show a count without a
+    # full load. get_trace sets it to len(spans).
+    span_count: int = 0
 
     # Rolled-up totals (computed on finish)
     total_input_tokens: int = 0

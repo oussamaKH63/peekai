@@ -26,9 +26,9 @@ def stats() -> None:
                 continue
             if span.model not in model_stats:
                 model_stats[span.model] = {"tokens": 0, "cost": 0.0, "calls": 0}
-            model_stats[span.model]["tokens"] += span.total_tokens  # type: ignore[operator]
-            model_stats[span.model]["cost"] += span.cost_usd  # type: ignore[operator]
-            model_stats[span.model]["calls"] += 1  # type: ignore[operator]
+            model_stats[span.model]["tokens"] += span.total_tokens
+            model_stats[span.model]["cost"] += span.cost_usd
+            model_stats[span.model]["calls"] += 1
 
     # ── Summary panel ─────────────────────────────────────────────
     summary = Table.grid(padding=(0, 3))

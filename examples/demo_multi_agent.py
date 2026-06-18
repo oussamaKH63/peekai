@@ -16,12 +16,19 @@ import os
 import peekai
 from openai import OpenAI
 
-API_KEY  = os.getenv("PEEKAI_DEMO_KEY", "sk-MtQLEYr9nuJJwUOvgxYE6VGrs0LkqXOzCLZGuXGX43122Ty9")
-BASE_URL = os.getenv("PEEKAI_DEMO_URL", "https://api.chatanywhere.tech/v1")
-MODEL    = "gpt-3.5-turbo"
+API_KEY = os.getenv("OPENAI_API_KEY")
+BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+MODEL = "gpt-4o-mini"
 
-os.environ.setdefault("OPENAI_API_KEY", API_KEY)
-os.environ.setdefault("OPENAI_BASE_URL", BASE_URL)
+if not API_KEY:
+    print("⚠️  OPENAI_API_KEY environment variable not set")
+    print("   Please set it first:")
+    print('   Windows: $env:OPENAI_API_KEY="your-key-here"')
+    print('   Linux/Mac: export OPENAI_API_KEY="your-key-here"')
+    exit(1)
+
+os.environ["OPENAI_API_KEY"] = API_KEY
+os.environ["OPENAI_BASE_URL"] = BASE_URL
 
 peekai.init()
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)

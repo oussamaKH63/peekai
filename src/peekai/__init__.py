@@ -63,6 +63,11 @@ def init(
     storage = Storage(db_path)
     _tracer = Tracer(storage=storage)
 
+    # Register with the patch registry so already-installed SDK patches use this
+    # (latest) tracer even when init() is called more than once.
+    from peekai.patches.registry import set_tracer
+    set_tracer(_tracer)
+
     if openai:
         from peekai.patches.openai_patch import patch as openai_patch
         openai_patch(_tracer)
