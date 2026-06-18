@@ -36,19 +36,28 @@ def _version_callback(value: bool) -> None:
 app = typer.Typer(
     name="peekai",
     help="👀 Lightweight, local-first observability for Python AI agents.",
-    no_args_is_help=True,
+    # We handle the no-args case ourselves to show the branded banner instead
+    # of Typer's default help text.
+    no_args_is_help=False,
     rich_markup_mode="rich",
+    add_completion=False,
 )
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: Annotated[
         bool,
         typer.Option("--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit."),
     ] = False,
 ) -> None:
-    pass
+    """👀 PeekAI — local-first observability for Python AI agents."""
+    # Only show the banner when the user runs `peekai` with no subcommand.
+    if ctx.invoked_subcommand is None:
+        from peekai.cli.banner import print_banner
+        print_banner()
+        raise typer.Exit()
 
 
 app.command("list")(list_traces)
