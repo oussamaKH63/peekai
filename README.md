@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="peekai-name-logo.png" alt="PeekAI" width="320" />
+  <img src="https://raw.githubusercontent.com/peekai/peekai/main/peekai-name-logo.png" alt="PeekAI" width="320" />
 
   <p><strong>Lightweight, local-first observability and debugging for Python AI agents.</strong></p>
 
@@ -41,6 +41,9 @@ pip install "peekai[openai]"
 
 # With Anthropic support
 pip install "peekai[anthropic]"
+
+# With the web dashboard
+pip install "peekai[ui]"
 
 # With everything
 pip install "peekai[all]"
@@ -239,7 +242,7 @@ Traces are stored locally at `~/.peekai/peekai.db` by default. You can open it d
 # Clone and install
 git clone https://github.com/peekai/peekai
 cd peekai
-uv sync --extra all
+uv sync --extra all  # includes openai, anthropic, litellm, ui
 
 # Run tests
 uv run pytest tests/ -v

@@ -2,10 +2,10 @@
 PeekAI CLI welcome banner.
 
 Shown when `peekai` is invoked with no arguments. Styled after modern CLI
-tools (Claude Code, gh, etc.) — brand colors from peekai-icon.svg,
-Braille logo art + block wordmark + command overview.
+tools (Claude Code, gh, etc.) — brand colors from peekai-name-logo.png,
+block wordmark + command overview.
 
-Brand colors (from peekai-icon.svg):
+Brand colors:
   Primary  #ff6600  — orange
   Navy     #001f5b  — dark body
 """

@@ -18,8 +18,6 @@ def _asset_b64(filename: str, mime: str) -> str:
     return ""
 
 
-LOGO_URI = _asset_b64("peekai-logo.png", "image/png")
-LOGO_FULL_URI = _asset_b64("peekai-name-logo.png", "image/png")
 ICON_URI = _asset_b64("favicon.svg", "image/svg+xml")
 
 GLOBAL_CSS = """

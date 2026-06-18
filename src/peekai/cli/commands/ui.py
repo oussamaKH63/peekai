@@ -32,5 +32,5 @@ def ui(
     except KeyboardInterrupt:
         console.print("\n[dim]UI stopped.[/dim]")
     except FileNotFoundError:
-        console.print("[error]streamlit not found. Run: uv sync[/error]")
+        console.print('[error]streamlit not found. Install it with: pip install "peekai[ui]"[/error]')
         raise typer.Exit(1)
