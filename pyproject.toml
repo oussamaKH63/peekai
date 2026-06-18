@@ -50,10 +50,10 @@ dev = [
 peekai = "peekai.cli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/peekai/peekai"
-Repository = "https://github.com/peekai/peekai"
-Issues = "https://github.com/peekai/peekai/issues"
-Changelog = "https://github.com/peekai/peekai/releases"
+Homepage = "https://github.com/oussamaKH63/peekai"
+Repository = "https://github.com/oussamaKH63/peekai"
+Issues = "https://github.com/oussamaKH63/peekai/issues"
+Changelog = "https://github.com/oussamaKH63/peekai/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/peekai"]

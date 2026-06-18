@@ -51,4 +51,4 @@ First public release.
 
 ---
 
-[0.1.0]: https://github.com/peekai/peekai/releases/tag/v0.1.0
+[0.1.0]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.0

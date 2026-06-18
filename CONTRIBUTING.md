@@ -7,7 +7,7 @@ Thanks for your interest in contributing. PeekAI is a small, focused tool — co
 ## Getting started
 
 ```bash
-git clone https://github.com/peekai/peekai
+git clone https://github.com/oussamaKH63/peekai
 cd peekai
 uv sync --extra all
 uv run pytest tests/ -v

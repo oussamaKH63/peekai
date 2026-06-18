@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/peekai/peekai/main/peekai-name-logo.png" alt="PeekAI" width="320" />
+  <img src="https://raw.githubusercontent.com/oussamaKH63/peekai/main/peekai-name-logo.png" alt="PeekAI" width="320" />
 
   <p><strong>Lightweight, local-first observability and debugging for Python AI agents.</strong></p>
 
@@ -9,7 +9,7 @@
 
   [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
   [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-  [![Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/peekai/peekai)
+  [![Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/oussamaKH63/peekai)
   [![uv](https://img.shields.io/badge/packaged%20with-uv-purple)](https://github.com/astral-sh/uv)
 </div>
 
@@ -240,7 +240,7 @@ Traces are stored locally at `~/.peekai/peekai.db` by default. You can open it d
 
 ```bash
 # Clone and install
-git clone https://github.com/peekai/peekai
+git clone https://github.com/oussamaKH63/peekai
 cd peekai
 uv sync --extra all  # includes openai, anthropic, litellm, ui
 
