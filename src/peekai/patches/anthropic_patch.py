@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from peekai.core.costs import calculate_cost
 from peekai.core.models import SpanKind, SpanStatus
-from peekai.patches._stream import AnthropicAccumulator, wrap_async, wrap_sync
+from peekai.patches._stream import AnthropicAccumulator, AsyncTracedMessageStreamManager, TracedMessageStreamManager, wrap_async, wrap_sync
 from peekai.patches.registry import get_tracer, set_tracer
 
 if TYPE_CHECKING:
@@ -50,10 +50,11 @@ def unpatch() -> None:
         return
     targets: list[Any] = [Messages, AsyncMessages]
     for cls in targets:
-        original = getattr(cls, "_peekai_original_create", None)
-        if original is not None:
-            cls.create = original
-            delattr(cls, "_peekai_original_create")
+        for method in ("create", "stream"):
+            original = getattr(cls, f"_peekai_original_{method}", None)
+            if original is not None:
+                setattr(cls, method, original)
+                delattr(cls, f"_peekai_original_{method}")
     _patched = False
 
 
@@ -105,6 +106,32 @@ def _patch_sync(Messages: Any) -> None:
 
     Messages.create = patched_create
 
+    original_stream = Messages.stream
+    Messages._peekai_original_stream = original_stream
+
+    def patched_stream(self: Any, *args: Any, **kwargs: Any) -> Any:
+        tracer = get_tracer()
+        if tracer is None:
+            return original_stream(self, *args, **kwargs)
+
+        model: str = kwargs.get("model", "")
+        messages: list[dict[str, Any]] = kwargs.get("messages", [])
+        system: Any = kwargs.get("system", "")
+
+        span = tracer.start_span(
+            name=f"anthropic/{model}",
+            kind=SpanKind.LLM,
+            model=model,
+            provider="anthropic",
+        )
+        span.input = _build_input(messages, system)
+        tracer.finish_span(span, SpanStatus.OK)
+
+        manager = original_stream(self, *args, **kwargs)
+        return TracedMessageStreamManager(manager, span, model, tracer)
+
+    Messages.stream = patched_stream
+
 
 # ------------------------------------------------------------------
 # Async patch
@@ -146,6 +173,32 @@ def _patch_async(AsyncMessages: Any) -> None:
         return response
 
     AsyncMessages.create = patched_create
+
+    original_stream = AsyncMessages.stream
+    AsyncMessages._peekai_original_stream = original_stream
+
+    def patched_stream(self: Any, *args: Any, **kwargs: Any) -> Any:
+        tracer = get_tracer()
+        if tracer is None:
+            return original_stream(self, *args, **kwargs)
+
+        model: str = kwargs.get("model", "")
+        messages: list[dict[str, Any]] = kwargs.get("messages", [])
+        system: Any = kwargs.get("system", "")
+
+        span = tracer.start_span(
+            name=f"anthropic/{model}",
+            kind=SpanKind.LLM,
+            model=model,
+            provider="anthropic",
+        )
+        span.input = _build_input(messages, system)
+        tracer.finish_span(span, SpanStatus.OK)
+
+        manager = original_stream(self, *args, **kwargs)
+        return AsyncTracedMessageStreamManager(manager, span, model, tracer)
+
+    AsyncMessages.stream = patched_stream
 
 
 # ------------------------------------------------------------------

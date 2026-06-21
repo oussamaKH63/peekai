@@ -8,7 +8,9 @@
   every LLM call, every tool use, every token spent.</p>
 
   [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-  [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+  [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/oussamaKH63/peekai/blob/main/LICENSE)
+  [![PyPI version](https://img.shields.io/pypi/v/peekai)](https://pypi.org/project/peekai/)
+  [![PyPI downloads](https://img.shields.io/pypi/dm/peekai)](https://pypi.org/project/peekai/)
   [![Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/oussamaKH63/peekai)
   [![uv](https://img.shields.io/badge/packaged%20with-uv-purple)](https://github.com/astral-sh/uv)
 </div>
@@ -229,10 +231,8 @@ Traces are stored locally at `~/.peekai/peekai.db` by default. You can open it d
 | SDK | Status | Notes |
 |---|---|---|
 | OpenAI | ✅ Auto-patched | sync + async, streaming |
-| Anthropic | ✅ Auto-patched | sync + async, `create(stream=True)` |
+| Anthropic | ✅ Auto-patched | sync + async, `create(stream=True)` + `stream()` context manager |
 | LiteLLM | ✅ Auto-patched | sync + async |
-
-> **Note** — the Anthropic `client.messages.stream()` context manager helper is not currently patched. Use `client.messages.create(stream=True)` to get streaming traces.
 
 ---
 
@@ -279,4 +279,4 @@ PRs and issues are welcome. See `CONTRIBUTING.md` for more detail.
 
 ## License
 
-MIT © [Oussema Khorchani](https://github.com/peekai)
+MIT © [Oussema Khorchani](https://github.com/oussamaKH63/peekai)
