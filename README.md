@@ -257,19 +257,6 @@ uv run peekai ui
 
 ---
 
-## Roadmap
-
-| Feature | Status |
-|---|---|
-| Core SDK — tracing, storage, patches | ✅ Done |
-| CLI — list, view, stats, clear, map | ✅ Done |
-| Streamlit UI — dashboard, traces, waterfall | ✅ Done |
-| Trace Replay — model swap, tool override | ✅ Done |
-| Multi-Agent — nested spans, agent decorator | ✅ Done |
-| v0.1 Public Release | 🔵 In Progress |
-
----
-
 ## Contributing
 
 ```bash
