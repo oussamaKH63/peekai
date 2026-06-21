@@ -13,6 +13,12 @@ caller consumes it. We wrap the stream in a transparent proxy that:
 The owning span is finished (and the active-span context restored) at call time —
 the proxy only updates the already-saved record, so streaming never interferes
 with parent/child span tracking.
+
+``TracedMessageStreamManager`` / ``AsyncTracedMessageStreamManager`` cover the
+Anthropic ``client.messages.stream()`` context-manager API.  They wrap the
+``MessageStreamManager`` returned by the SDK and inject a ``_TracedStream`` /
+``_AsyncTracedStream`` around the inner ``MessageStream`` so that all events are
+captured exactly as with ``create(stream=True)``.
 """
 
 from __future__ import annotations
@@ -252,3 +258,81 @@ def wrap_async(
     """Wrap an async stream so the span is finalized when it is consumed."""
     finalize = _make_finalizer(span, accumulator, model, tracer)
     return _AsyncTracedStream(stream, accumulator, finalize)
+
+
+# ---------------------------------------------------------------------------
+# Anthropic client.messages.stream() context-manager wrappers
+# ---------------------------------------------------------------------------
+
+class TracedMessageStreamManager:
+    """Wraps the sync ``MessageStreamManager`` returned by ``client.messages.stream()``.
+
+    The manager's ``__enter__`` normally returns a ``MessageStream``.  We
+    intercept that and hand back a ``_TracedStream`` proxy instead, so every
+    event is captured by the existing ``AnthropicAccumulator`` machinery.
+    """
+
+    def __init__(
+        self,
+        manager: Any,
+        span: Span,
+        model: str,
+        tracer: "Tracer",
+    ) -> None:
+        self._manager = manager
+        self._span = span
+        self._model = model
+        self._tracer = tracer
+
+    def __enter__(self) -> "_TracedStream":
+        inner_stream = self._manager.__enter__()
+        finalize = _make_finalizer(self._span, AnthropicAccumulator(), self._model, self._tracer)
+        self._traced = _TracedStream(inner_stream, AnthropicAccumulator(), finalize)
+        # Re-use the same accumulator instance for both the proxy and the finalizer.
+        finalize2 = _make_finalizer(self._span, self._traced._acc, self._model, self._tracer)
+        self._traced._finalize = finalize2
+        return self._traced
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._manager.__exit__(*exc)
+
+    def __getattr__(self, name: str) -> Any:
+        manager = self.__dict__.get("_manager")
+        if manager is None:
+            raise AttributeError(name)
+        return getattr(manager, name)
+
+
+class AsyncTracedMessageStreamManager:
+    """Wraps the async ``AsyncMessageStreamManager`` returned by ``async_client.messages.stream()``.
+
+    Same approach as ``TracedMessageStreamManager`` but for async context managers.
+    """
+
+    def __init__(
+        self,
+        manager: Any,
+        span: Span,
+        model: str,
+        tracer: "Tracer",
+    ) -> None:
+        self._manager = manager
+        self._span = span
+        self._model = model
+        self._tracer = tracer
+
+    async def __aenter__(self) -> "_AsyncTracedStream":
+        inner_stream = await self._manager.__aenter__()
+        acc = AnthropicAccumulator()
+        finalize = _make_finalizer(self._span, acc, self._model, self._tracer)
+        self._traced = _AsyncTracedStream(inner_stream, acc, finalize)
+        return self._traced
+
+    async def __aexit__(self, *exc: Any) -> Any:
+        return await self._manager.__aexit__(*exc)
+
+    def __getattr__(self, name: str) -> Any:
+        manager = self.__dict__.get("_manager")
+        if manager is None:
+            raise AttributeError(name)
+        return getattr(manager, name)

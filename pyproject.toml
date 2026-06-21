@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "peekai"
-version = "0.1.1"
+version = "0.1.2"
 description = "Lightweight, local-first observability and debugging for Python AI agents."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.10"
 authors = [
     { name = "Oussema Khorchani", email = "oussama.khorchany@gmail.com" }

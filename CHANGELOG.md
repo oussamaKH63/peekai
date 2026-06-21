@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.2] — 2026-06-21
+
+### Added
+- PyPI version badge and monthly downloads badge in README
+- Full Anthropic `client.messages.stream()` context-manager support — sync and async — now produces traces identical to `create(stream=True)`
+
+### Fixed
+- License badge in README now links to the GitHub URL (was a relative path, broken on PyPI and some renderers)
+- `pyproject.toml` license field changed to SPDX string format (`"MIT"`) — resolves the "unverified" license label on PyPI
+
+---
+
 ## [0.1.1] — 2026-06-19
 
 ### Fixed
@@ -59,5 +71,6 @@ First public release.
 
 ---
 
+[0.1.2]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.2
 [0.1.1]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.1
 [0.1.0]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.0
