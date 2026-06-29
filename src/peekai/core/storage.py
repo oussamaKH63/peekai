@@ -5,11 +5,19 @@ Schema
 ------
 traces  — one row per Trace
 spans   — one row per Span, foreign-keyed to traces
+
+Security
+--------
+On POSIX systems the trace directory is created with 0o700 and the database
+(plus WAL/SHM sidecar files) is set to 0o600 after the first write transaction
+so that only the owning user can read trace data.  On Windows chmod is a no-op
+and this hardening is skipped; document the limitation rather than fighting it.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -19,6 +27,26 @@ from typing import Any
 from peekai.core.models import Span, SpanKind, SpanStatus, Trace
 
 _DEFAULT_DB_PATH = Path.home() / ".peekai" / "peekai.db"
+
+
+def _harden_permissions(db_path: Path) -> None:
+    """Set owner-only permissions on the database and its WAL/SHM sidecars.
+
+    Only runs on POSIX (Linux/macOS).  On Windows chmod is effectively a no-op
+    so we skip it entirely rather than giving a false sense of security.
+    WAL and SHM files are created lazily by SQLite on the first write, so we
+    check for their existence before attempting chmod.
+    """
+    if os.name != "posix":
+        return
+    try:
+        db_path.chmod(0o600)
+        for suffix in ("-wal", "-shm"):
+            sidecar = db_path.with_name(db_path.name + suffix)
+            if sidecar.exists():
+                sidecar.chmod(0o600)
+    except OSError:
+        pass  # best-effort — never crash user code over a permission tweak
 
 _CREATE_TRACES = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -79,14 +107,33 @@ class Storage:
     """
     Manages all read/write operations against the local SQLite database.
 
+    Args:
+        db_path:         Path to the SQLite database file.
+                         Defaults to ``~/.peekai/peekai.db``.
+        capture_content: When ``True`` (default) raw prompts, completions,
+                         tool-call arguments, and error messages are stored.
+                         Set to ``False`` to retain only timing, token counts,
+                         costs, and status — useful in shared or regulated
+                         environments where prompt content is sensitive.
+
     Usage:
         storage = Storage()                        # default ~/.peekai/peekai.db
         storage = Storage("/tmp/test.db")          # custom path
+        storage = Storage(capture_content=False)   # metadata-only mode
     """
 
-    def __init__(self, db_path: str | Path | None = None) -> None:
+    def __init__(self, db_path: str | Path | None = None, capture_content: bool = True) -> None:
         self.db_path = Path(db_path) if db_path else _DEFAULT_DB_PATH
+        self.capture_content = capture_content
+
+        # Create the parent directory with owner-only permissions on POSIX.
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "posix":
+            try:
+                self.db_path.parent.chmod(0o700)
+            except OSError:
+                pass
+
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -96,6 +143,9 @@ class Storage:
         # safe for concurrent use, so serialise all access through this lock.
         self._lock = threading.RLock()
         self._migrate()
+        # Harden db + WAL/SHM after the first write transaction so sidecar
+        # files already exist when we chmod them.
+        _harden_permissions(self.db_path)
 
     # ------------------------------------------------------------------
     # Schema
@@ -190,6 +240,22 @@ class Storage:
 
     def save_span(self, span: Span) -> None:
         """Insert or replace a span record."""
+        # When capture_content is disabled, strip all raw I/O before persisting.
+        # Timing, token counts, costs, status, and error_type are always kept so
+        # the cost/latency dashboard still works in metadata-only mode.
+        if self.capture_content:
+            input_val = json.dumps(span.input, default=str)
+            output_val = span.output
+            raw_response_val = json.dumps(span.raw_response, default=str)
+            tool_calls_val = json.dumps(span.tool_calls, default=str)
+            error_val = span.error
+        else:
+            input_val = "[]"
+            output_val = ""
+            raw_response_val = "{}"
+            tool_calls_val = "[]"
+            error_val = None  # drop message content, keep error_type
+
         with self._lock, self._conn:
             self._conn.execute(
                 """
@@ -211,15 +277,15 @@ class Storage:
                     _dt_to_str(span.started_at),
                     _dt_to_str(span.ended_at),
                     span.status.value,
-                    json.dumps(span.input, default=str),
-                    span.output,
-                    json.dumps(span.raw_response, default=str),
+                    input_val,
+                    output_val,
+                    raw_response_val,
                     span.input_tokens,
                     span.output_tokens,
                     span.total_tokens,
                     span.cost_usd,
-                    json.dumps(span.tool_calls, default=str),
-                    span.error,
+                    tool_calls_val,
+                    error_val,
                     span.error_type,
                     json.dumps(span.metadata, default=str),
                 ),
