@@ -40,16 +40,21 @@ def init(
     openai: bool = True,
     anthropic: bool = True,
     litellm: bool = True,
+    capture_content: bool = True,
 ) -> Tracer:
     """
     Initialize PeekAI and auto-patch all installed AI SDKs.
 
     Args:
-        db_path:   Custom path for the SQLite database.
-                   Defaults to ~/.peekai/peekai.db
-        openai:    Patch the OpenAI SDK (default True).
-        anthropic: Patch the Anthropic SDK (default True).
-        litellm:   Patch LiteLLM (default True).
+        db_path:         Custom path for the SQLite database.
+                         Defaults to ~/.peekai/peekai.db
+        openai:          Patch the OpenAI SDK (default True).
+        anthropic:       Patch the Anthropic SDK (default True).
+        litellm:         Patch LiteLLM (default True).
+        capture_content: Store raw prompts, completions, tool-call arguments,
+                         and error messages (default True).  Set to False to
+                         retain only timing, token counts, and costs — useful
+                         in shared or regulated environments.
 
     Returns:
         The global Tracer instance.
@@ -57,10 +62,13 @@ def init(
     Usage:
         import peekai
         peekai.init()
+
+        # Metadata-only mode — no raw content stored:
+        peekai.init(capture_content=False)
     """
     global _tracer
 
-    storage = Storage(db_path)
+    storage = Storage(db_path, capture_content=capture_content)
     _tracer = Tracer(storage=storage)
 
     # Register with the patch registry so already-installed SDK patches use this

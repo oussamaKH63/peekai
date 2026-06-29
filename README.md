@@ -219,10 +219,18 @@ peekai.init(
     openai=True,               # patch OpenAI SDK (default True)
     anthropic=True,            # patch Anthropic SDK (default True)
     litellm=True,              # patch LiteLLM (default True)
+    capture_content=True,      # store raw prompts/responses (default True)
+                               # set False to keep only tokens/costs/timings
 )
 ```
 
 Traces are stored locally at `~/.peekai/peekai.db` by default. You can open it directly with any SQLite viewer, back it up, or wipe it with `peekai clear`.
+
+> **⚠️ Traces contain sensitive data** — prompts, completions, and tool-call arguments can include API keys, credentials, PII, and proprietary content. A few precautions:
+> - Add `~/.peekai/` to your `~/.gitignore` so traces are never committed.
+> - Use `peekai clear` to wipe the database when you no longer need the history.
+> - Pass `capture_content=False` to store only timing, token counts, and costs without any raw content.
+> - On POSIX systems (Linux/macOS) PeekAI sets the trace directory to `0700` and the database to `0600` automatically. On Windows filesystem permissions are not enforced.
 
 ---
 
