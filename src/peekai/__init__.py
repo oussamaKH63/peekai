@@ -18,7 +18,7 @@ from peekai.core.redaction import RedactOption
 from peekai.core.storage import Storage
 from peekai.core.tracer import Tracer
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 __all__ = [
     "init",
     "trace",

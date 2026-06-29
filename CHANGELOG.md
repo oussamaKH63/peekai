@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.5] — 2026-06-29
+
+### Security
+- Fix key-blind dict redaction gap — `_scrub_value` is now key-aware: when recursing a dict, values under sensitive keys (`api_key`, `password`, `token`, `secret`, `authorization`, `private_key`, `access_token`, `client_secret`, etc.) are replaced with `[REDACTED]` regardless of content shape. Previously only token-shaped secrets (matching a regex) were caught; plain-string passwords and custom-format tokens stored as dict values were not.
+- Add PEM private/public key block pattern (`-----BEGIN ... KEY-----`).
+- Redact `span.metadata` and `trace.metadata` before persistence (both were written raw).
+- Remove redundant Anthropic key pattern (already matched by the `sk-` pattern).
+- Remove dead `re.DOTALL` flag on the JSON-blob pattern.
+- Short-circuit redaction when `capture_content=False` — no CPU wasted on data that will be discarded.
+- Document known limitation: AWS 40-char secret access keys cannot be caught without false positives; real boundary is `0600` permissions.
+- Expand test suite from 18 to 29 tests — new tests cover dict-form secrets, metadata redaction, raw DB bytes for dict secrets, capture_content short-circuit, and the AWS limitation.
+
+---
+
 ## [0.1.4] — 2026-06-29
 
 ### Security
@@ -90,6 +104,7 @@ First public release.
 
 ---
 
+[0.1.5]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.5
 [0.1.4]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.4
 [0.1.3]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.3
 [0.1.2]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.2
