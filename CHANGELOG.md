@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.3] — 2026-06-29
+
+### Security
+- Trace directory (`~/.peekai/`) is now created with `0700` and the database plus WAL/SHM sidecar files are set to `0600` on POSIX systems (Linux/macOS), preventing other local users and indexing software from reading trace data. No-op on Windows (documented).
+- Add `capture_content=False` option to `peekai.init()` and `Storage` — when disabled, raw prompts, completions, tool-call arguments, and error messages are blanked before persistence; token counts, costs, timings, model, and status are always retained.
+- README: security warning block added near the storage section covering `.gitignore`, `peekai clear`, `capture_content=False`, and POSIX-only permission scope.
+
+---
+
 ## [0.1.2] — 2026-06-21
 
 ### Added
@@ -71,6 +80,7 @@ First public release.
 
 ---
 
+[0.1.3]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.3
 [0.1.2]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.2
 [0.1.1]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.1
 [0.1.0]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.0
