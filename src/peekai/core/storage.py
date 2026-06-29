@@ -185,6 +185,12 @@ class Storage:
 
     def save_trace(self, trace: Trace) -> None:
         """Insert or replace a trace record."""
+        # Redact trace-level metadata (user-attached run context may contain secrets).
+        if self._redactor is not None:
+            metadata_data = self._redactor(trace.metadata)
+        else:
+            metadata_data = trace.metadata
+
         with self._lock, self._conn:
             self._conn.execute(
                 """
@@ -204,7 +210,7 @@ class Storage:
                     trace.total_output_tokens,
                     trace.total_tokens,
                     trace.total_cost_usd,
-                    json.dumps(trace.metadata, default=str),
+                    json.dumps(metadata_data, default=str),
                 ),
             )
 
@@ -254,35 +260,41 @@ class Storage:
 
     def save_span(self, span: Span) -> None:
         """Insert or replace a span record."""
-        # 1. Redact secrets from raw content fields before any serialisation.
-        #    Runs even when capture_content=True so secrets never reach the DB.
-        if self._redactor is not None:
-            input_data = self._redactor(span.input)
-            output_data = self._redactor(span.output)
-            raw_response_data = self._redactor(span.raw_response)
-            tool_calls_data = self._redactor(span.tool_calls)
-            error_data = self._redactor(span.error) if span.error is not None else None
+        # 1. When capture_content is disabled the raw I/O fields are blanked, but
+        #    metadata is still persisted — so it must still be redacted here.
+        if not self.capture_content:
+            input_val = "[]"
+            output_val = ""
+            raw_response_val = "{}"
+            tool_calls_val = "[]"
+            error_val = None
+            metadata_data = (
+                self._redactor(span.metadata) if self._redactor is not None else span.metadata
+            )
+            metadata_val = json.dumps(metadata_data, default=str)
         else:
-            input_data = span.input
-            output_data = span.output
-            raw_response_data = span.raw_response
-            tool_calls_data = span.tool_calls
-            error_data = span.error
+            # 2. Redact secrets from every raw content field, including metadata.
+            if self._redactor is not None:
+                input_data = self._redactor(span.input)
+                output_data = self._redactor(span.output)
+                raw_response_data = self._redactor(span.raw_response)
+                tool_calls_data = self._redactor(span.tool_calls)
+                error_data = self._redactor(span.error) if span.error is not None else None
+                metadata_data = self._redactor(span.metadata)
+            else:
+                input_data = span.input
+                output_data = span.output
+                raw_response_data = span.raw_response
+                tool_calls_data = span.tool_calls
+                error_data = span.error
+                metadata_data = span.metadata
 
-        # 2. When capture_content is disabled, blank all raw I/O after redaction.
-        #    Timing, token counts, costs, status, and error_type are always kept.
-        if self.capture_content:
             input_val = json.dumps(input_data, default=str)
             output_val = output_data if isinstance(output_data, str) else str(output_data)
             raw_response_val = json.dumps(raw_response_data, default=str)
             tool_calls_val = json.dumps(tool_calls_data, default=str)
             error_val = error_data
-        else:
-            input_val = "[]"
-            output_val = ""
-            raw_response_val = "{}"
-            tool_calls_val = "[]"
-            error_val = None  # drop message content, keep error_type
+            metadata_val = json.dumps(metadata_data, default=str)
 
         with self._lock, self._conn:
             self._conn.execute(
@@ -315,7 +327,7 @@ class Storage:
                     tool_calls_val,
                     error_val,
                     span.error_type,
-                    json.dumps(span.metadata, default=str),
+                    metadata_val,
                 ),
             )
 

@@ -138,3 +138,27 @@ def test_capture_content_false_preserves_metrics(tmp_path):
     assert saved.error_type is None  # no error was set via finish_with_error
     assert saved.ended_at is not None
     storage.close()
+
+
+def test_capture_content_false_still_redacts_metadata(tmp_path):
+    """capture_content=False blanks raw I/O but still persists metadata — so a
+    secret planted in metadata must still be scrubbed before it hits the DB."""
+    secret = "sk-proj-MetaLeakTest1234567890ABCDE"
+    db_file = tmp_path / "meta_redact.db"
+
+    storage = Storage(db_file, capture_content=False, redact=True)
+    tracer = Tracer(storage=storage)
+    tracer.start_trace("meta_test")
+    span = tracer.start_span("openai/gpt-4o", kind=SpanKind.LLM, model="gpt-4o", provider="openai")
+    span.metadata = {"api_key": secret, "note": "keep me"}
+    tracer.finish_span(span, SpanStatus.OK)
+    storage.close()
+
+    raw_bytes = db_file.read_bytes()
+    assert secret.encode() not in raw_bytes, "Secret leaked via metadata in capture_content=False mode"
+
+    storage = Storage(db_file, capture_content=False)
+    saved = storage.get_spans(span.trace_id)[0]
+    assert saved.metadata.get("note") == "keep me"  # non-secret metadata preserved
+    assert "REDACTED" in str(saved.metadata.get("api_key"))
+    storage.close()
