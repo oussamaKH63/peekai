@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from peekai.core.models import Span, SpanKind, SpanStatus, Trace
+from peekai.core.redaction import RedactOption
 from peekai.core.storage import Storage
 from peekai.core.tracer import Tracer
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 __all__ = [
     "init",
     "trace",
@@ -41,6 +42,7 @@ def init(
     anthropic: bool = True,
     litellm: bool = True,
     capture_content: bool = True,
+    redact: RedactOption = True,
 ) -> Tracer:
     """
     Initialize PeekAI and auto-patch all installed AI SDKs.
@@ -55,6 +57,12 @@ def init(
                          and error messages (default True).  Set to False to
                          retain only timing, token counts, and costs — useful
                          in shared or regulated environments.
+        redact:          Scrub secrets before persistence (default True).
+                         Built-in patterns cover OpenAI/Anthropic/AWS keys,
+                         bearer tokens, and common secret fields.
+                         Pass False to disable, a callable ``str -> str`` for
+                         a custom scrubber, or a list of compiled
+                         ``re.Pattern`` objects for custom patterns.
 
     Returns:
         The global Tracer instance.
@@ -65,10 +73,16 @@ def init(
 
         # Metadata-only mode — no raw content stored:
         peekai.init(capture_content=False)
+
+        # Disable redaction (not recommended):
+        peekai.init(redact=False)
+
+        # Custom scrubber:
+        peekai.init(redact=lambda s: s.replace("my-secret", "[REDACTED]"))
     """
     global _tracer
 
-    storage = Storage(db_path, capture_content=capture_content)
+    storage = Storage(db_path, capture_content=capture_content, redact=redact)
     _tracer = Tracer(storage=storage)
 
     # Register with the patch registry so already-installed SDK patches use this
