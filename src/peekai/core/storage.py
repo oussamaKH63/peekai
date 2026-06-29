@@ -260,15 +260,18 @@ class Storage:
 
     def save_span(self, span: Span) -> None:
         """Insert or replace a span record."""
-        # 1. When capture_content is disabled there is nothing to redact —
-        #    all raw fields will be blanked anyway. Skip redaction for efficiency.
+        # 1. When capture_content is disabled the raw I/O fields are blanked, but
+        #    metadata is still persisted — so it must still be redacted here.
         if not self.capture_content:
             input_val = "[]"
             output_val = ""
             raw_response_val = "{}"
             tool_calls_val = "[]"
             error_val = None
-            metadata_val = json.dumps(span.metadata, default=str)
+            metadata_data = (
+                self._redactor(span.metadata) if self._redactor is not None else span.metadata
+            )
+            metadata_val = json.dumps(metadata_data, default=str)
         else:
             # 2. Redact secrets from every raw content field, including metadata.
             if self._redactor is not None:

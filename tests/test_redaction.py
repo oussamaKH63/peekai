@@ -268,9 +268,9 @@ def test_redact_false_preserves_secret(tmp_path):
     storage.close()
 
 
-def test_capture_content_false_skips_redaction_entirely(tmp_path):
-    """capture_content=False blanks everything — redactor must not be called
-    (efficiency: no wasted CPU on data that will be discarded)."""
+def test_capture_content_false_skips_redaction_for_io_fields(tmp_path):
+    """capture_content=False blanks raw I/O but still redacts metadata.
+    The redactor must be called for metadata, not for input/output/tool_calls."""
     calls: list[str] = []
 
     def counting_redactor(s: str) -> str:
@@ -284,7 +284,12 @@ def test_capture_content_false_skips_redaction_entirely(tmp_path):
     span = tracer.start_span("openai/gpt-4o", kind=SpanKind.LLM, model="gpt-4o", provider="openai")
     span.input = [{"role": "user", "content": "hello"}]
     span.output = "world"
+    span.metadata = {"note": "keep"}
     tracer.finish_span(span, SpanStatus.OK)
 
-    assert calls == [], "Redactor must not be called when capture_content=False"
+    # Redactor called for metadata, but input/output content ("hello", "world")
+    # must never be passed to it — they are blanked before redaction.
+    for call in calls:
+        assert "hello" not in call
+        assert "world" not in call
     storage.close()
