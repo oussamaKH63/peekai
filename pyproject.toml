@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "peekai"
-version = "0.1.3"
+version = "0.1.4"
 description = "Lightweight, local-first observability and debugging for Python AI agents."
 readme = "README.md"
 license = "MIT"

@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from peekai.core.models import Span, SpanKind, SpanStatus, Trace
+from peekai.core.redaction import RedactOption, build_redactor
 
 _DEFAULT_DB_PATH = Path.home() / ".peekai" / "peekai.db"
 
@@ -115,16 +116,29 @@ class Storage:
                          Set to ``False`` to retain only timing, token counts,
                          costs, and status — useful in shared or regulated
                          environments where prompt content is sensitive.
+        redact:          Controls secret scrubbing before persistence.
+                         ``True`` (default) — apply built-in patterns for
+                         OpenAI/Anthropic/AWS keys, bearer tokens, and common
+                         secret fields.  ``False`` — disable entirely.
+                         A callable ``str -> str`` or a list of compiled
+                         ``re.Pattern`` objects can be passed for custom rules.
 
     Usage:
         storage = Storage()                        # default ~/.peekai/peekai.db
         storage = Storage("/tmp/test.db")          # custom path
         storage = Storage(capture_content=False)   # metadata-only mode
+        storage = Storage(redact=False)            # disable redaction
     """
 
-    def __init__(self, db_path: str | Path | None = None, capture_content: bool = True) -> None:
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        capture_content: bool = True,
+        redact: RedactOption = True,
+    ) -> None:
         self.db_path = Path(db_path) if db_path else _DEFAULT_DB_PATH
         self.capture_content = capture_content
+        self._redactor = build_redactor(redact)
 
         # Create the parent directory with owner-only permissions on POSIX.
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,15 +254,29 @@ class Storage:
 
     def save_span(self, span: Span) -> None:
         """Insert or replace a span record."""
-        # When capture_content is disabled, strip all raw I/O before persisting.
-        # Timing, token counts, costs, status, and error_type are always kept so
-        # the cost/latency dashboard still works in metadata-only mode.
+        # 1. Redact secrets from raw content fields before any serialisation.
+        #    Runs even when capture_content=True so secrets never reach the DB.
+        if self._redactor is not None:
+            input_data = self._redactor(span.input)
+            output_data = self._redactor(span.output)
+            raw_response_data = self._redactor(span.raw_response)
+            tool_calls_data = self._redactor(span.tool_calls)
+            error_data = self._redactor(span.error) if span.error is not None else None
+        else:
+            input_data = span.input
+            output_data = span.output
+            raw_response_data = span.raw_response
+            tool_calls_data = span.tool_calls
+            error_data = span.error
+
+        # 2. When capture_content is disabled, blank all raw I/O after redaction.
+        #    Timing, token counts, costs, status, and error_type are always kept.
         if self.capture_content:
-            input_val = json.dumps(span.input, default=str)
-            output_val = span.output
-            raw_response_val = json.dumps(span.raw_response, default=str)
-            tool_calls_val = json.dumps(span.tool_calls, default=str)
-            error_val = span.error
+            input_val = json.dumps(input_data, default=str)
+            output_val = output_data if isinstance(output_data, str) else str(output_data)
+            raw_response_val = json.dumps(raw_response_data, default=str)
+            tool_calls_val = json.dumps(tool_calls_data, default=str)
+            error_val = error_data
         else:
             input_val = "[]"
             output_val = ""

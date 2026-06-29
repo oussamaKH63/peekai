@@ -221,6 +221,10 @@ peekai.init(
     litellm=True,              # patch LiteLLM (default True)
     capture_content=True,      # store raw prompts/responses (default True)
                                # set False to keep only tokens/costs/timings
+    redact=True,               # scrub secrets before persistence (default True)
+                               # built-in patterns: OpenAI/Anthropic/AWS keys,
+                               # bearer tokens, common secret fields
+                               # set False to disable, or pass a callable/pattern list
 )
 ```
 

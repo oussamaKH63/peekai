@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.4] — 2026-06-29
+
+### Security
+- Add redaction pipeline (`src/peekai/core/redaction.py`) — secrets are scrubbed from all span fields before persistence. Default patterns cover OpenAI keys (`sk-...`, `sk-proj-...`), Anthropic keys (`sk-ant-...`), AWS access key IDs (`AKIA...`), Bearer tokens, and common JSON secret fields (`api_key`, `password`, `access_token`, etc.).
+- `peekai.init(redact=True)` — enabled by default. Pass `False` to disable, a `callable(str) -> str` for a custom scrubber, or a `list[re.Pattern]` for custom patterns.
+- Redaction runs at the single chokepoint in `Storage.save_span`, before `capture_content` gating, so secrets never reach SQLite regardless of SDK or mode.
+- 18 new tests in `tests/test_redaction.py` including a raw-DB-bytes assertion that the secret never reaches the file.
+
+---
+
 ## [0.1.3] — 2026-06-29
 
 ### Security
@@ -80,6 +90,7 @@ First public release.
 
 ---
 
+[0.1.4]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.4
 [0.1.3]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.3
 [0.1.2]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.2
 [0.1.1]: https://github.com/oussamaKH63/peekai/releases/tag/v0.1.1
